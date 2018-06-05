@@ -54,6 +54,7 @@ class ProjectRepository extends BaseRepository
             });
         }
 
+/* User id belongs to the user, who created the client, we want to list all clients  */
         if ($userId) {
             $query->where('projects.user_id', '=', $userId);
         }

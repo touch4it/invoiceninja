@@ -52,7 +52,7 @@ class ReportController extends BaseController
      */
     public function showReports()
     {
-        if (! Auth::user()->hasPermission('view_all')) {
+        if (! Auth::user()->hasPermission('view_all') && ! Auth::user()->hasPermission('manage_own_tasks')) {
             return redirect('/');
         }
 
