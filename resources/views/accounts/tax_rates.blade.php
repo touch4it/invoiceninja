@@ -35,17 +35,23 @@
         ->label('&nbsp;')
         ->value(1) !!}
 
-    @if (! $hasInclusiveTaxRates && ($account->inclusive_taxes || $countInvoices <= 10))
-        {!! Former::checkbox('inclusive_taxes')
-            ->text(trans('texts.inclusive_taxes_help'))
-            ->label('&nbsp;')
-            ->value(1) !!}
-    @endif
-
     {!! Former::checkbox('include_item_taxes_inline')
         ->text(trans('texts.include_item_taxes_inline'))
         ->label('&nbsp;')
         ->value(1) !!}
+
+    @if (! $hasInclusiveTaxRates && $countInvoices == 0)
+        <br/>
+        {!! Former::checkbox('inclusive_taxes')
+            ->text(trans('texts.inclusive_taxes_help'))
+            ->label('&nbsp;')
+            ->help('inclusive_taxes_notice')
+            ->value(1) !!}
+    @elseif ($countInvoices <= 10)
+        {!! Former::plaintext(' ')->help(
+                trans($account->inclusive_taxes ? 'texts.taxes_are_included_help' : 'texts.taxes_are_not_included_help') . '<br/>' .
+                trans('texts.change_requires_purge', ['link' => link_to(url('/settings/account_management'), trans('texts.purging'))])) !!}
+    @endif
 
       &nbsp;
 

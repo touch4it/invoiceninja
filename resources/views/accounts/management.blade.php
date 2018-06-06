@@ -95,7 +95,7 @@
 				@endif
 
 				@if (Auth::user()->created_at->diffInMonths() >= 3)
-					{!! Former::plaintext(' ')->help('review_app_help') !!}
+					{!! Former::plaintext(' ')->help(trans('texts.review_app_help', ['link' => link_to('http://www.capterra.com/p/145215/Invoice-Ninja', trans('texts.writing_a_review'), ['target' => '_blank'])])) !!}
 				@endif
 			</div>
 		</div>
@@ -189,6 +189,16 @@
 							</label>
 						</div>
 						@endforeach
+						@if (Utils::isSelfHost())
+							@foreach (Module::all() as $value)
+							{{ ($value->boot()) }}
+							<div class="checkbox">
+								<label for="custom_modules_{{ $value }}">
+									<input name="custom_modules[]" id="custom_modules_{{ $value }}" type="checkbox" {{ $value->enabled() ? 'checked="checked"' : '' }} value="{{ $value }}">{{ mtrans($value, $value->getLowerName()) }}
+								</label>
+							</div>
+							@endforeach
+						@endif
 					</div>
 				</div>
 				<div class="form-group">

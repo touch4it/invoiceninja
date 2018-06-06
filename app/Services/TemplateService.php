@@ -18,16 +18,26 @@ class TemplateService
      */
     public function processVariables($template, array $data)
     {
-        /** @var \App\Models\Account $account */
-        $account = $data['account'];
-
-        /** @var \App\Models\Client $client */
-        $client = $data['client'];
-
         /** @var \App\Models\Invitation $invitation */
         $invitation = $data['invitation'];
 
-        $invoice = $invitation->invoice;
+        /** @var \App\Models\Account $account */
+        $account = ! empty($data['account']) ? $data['account'] : $invitation->account;
+
+        /** @var \App\Models\Client $client */
+        $client = ! empty($data['client']) ? $data['client'] : $invitation->invoice->client;
+
+        $amount = ! empty($data['amount']) ? $data['amount'] : $invitation->invoice->getRequestedAmount();
+
+        // check if it's a proposal
+        if ($invitation->proposal) {
+            $invoice = $invitation->proposal->invoice;
+            $entityType = ENTITY_PROPOSAL;
+        } else {
+            $invoice = $invitation->invoice;
+            $entityType = $invoice->getEntityType();
+        }
+
         $contact = $invitation->contact;
         $passwordHTML = isset($data['password']) ? '<p>'.trans('texts.password').': '.$data['password'].'<p>' : false;
         $documentsHTML = '';
@@ -47,11 +57,11 @@ class TemplateService
             '$idNumber' => $client->id_number,
             '$vatNumber' => $client->vat_number,
             '$account' => $account->getDisplayName(),
-            '$dueDate' => $account->formatDate($invoice->partial_due_date ?: $invoice->due_date),
-            '$invoiceDate' => $account->formatDate($invoice->invoice_date),
+            '$dueDate' => $account->formatDate($invoice->getOriginal('partial_due_date') ?: $invoice->getOriginal('due_date')),
+            '$invoiceDate' => $account->formatDate($invoice->getOriginal('invoice_date')),
             '$contact' => $contact->getDisplayName(),
             '$firstName' => $contact->first_name,
-            '$amount' => $account->formatMoney($data['amount'], $client),
+            '$amount' => $account->formatMoney($amount, $client),
             '$total' => $invoice->present()->amount,
             '$balance' => $invoice->present()->balance,
             '$invoice' => $invoice->invoice_number,
@@ -61,9 +71,11 @@ class TemplateService
             '$link' => $invitation->getLink(),
             '$password' => $passwordHTML,
             '$viewLink' => $invitation->getLink().'$password',
-            '$viewButton' => Form::emailViewButton($invitation->getLink(), $invoice->getEntityType()).'$password',
+            '$viewButton' => Form::emailViewButton($invitation->getLink(), $entityType).'$password',
             '$paymentLink' => $invitation->getLink('payment').'$password',
             '$paymentButton' => Form::emailPaymentButton($invitation->getLink('payment')).'$password',
+            '$approveLink' => $invitation->getLink('approve').'$password',
+            '$approveButton' => Form::emailPaymentButton($invitation->getLink('approve'), 'approve').'$password',
             '$customClient1' => $client->custom_value1,
             '$customClient2' => $client->custom_value2,
             '$customContact1' => $contact->custom_value1,

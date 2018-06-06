@@ -8,6 +8,7 @@ use App\Http\Requests\UpdateTaskRequest;
 use App\Models\Client;
 use App\Models\Project;
 use App\Models\Task;
+use App\Models\TaskStatus;
 use App\Ninja\Datatables\TaskDatatable;
 use App\Ninja\Repositories\InvoiceRepository;
 use App\Ninja\Repositories\TaskRepository;
@@ -16,6 +17,7 @@ use Auth;
 use DropdownButton;
 use Input;
 use Redirect;
+use Request;
 use Session;
 use URL;
 use Utils;
@@ -82,9 +84,9 @@ class TaskController extends BaseController
      *
      * @return \Illuminate\Http\JsonResponse
      */
-    public function getDatatable($clientPublicId = null)
+    public function getDatatable($clientPublicId = null, $projectPublicId = null)
     {
-        return $this->taskService->getDatatable($clientPublicId, Input::get('sSearch'));
+        return $this->taskService->getDatatable($clientPublicId, $projectPublicId, Input::get('sSearch'));
     }
 
     /**
@@ -148,8 +150,11 @@ class TaskController extends BaseController
     public function edit(TaskRequest $request)
     {
         $this->checkTimezone();
-
         $task = $request->entity();
+
+        if (! $task) {
+            return redirect('/');
+        }
 
         $actions = [];
         if ($task->invoice) {
@@ -186,7 +191,7 @@ class TaskController extends BaseController
             'datetimeFormat' => Auth::user()->account->getMomentDateTimeFormat(),
         ];
 
-        $data = array_merge($data, self::getViewModel());
+        $data = array_merge($data, self::getViewModel($task));
 
         return View::make('tasks.edit', $data);
     }
@@ -208,12 +213,12 @@ class TaskController extends BaseController
     /**
      * @return array
      */
-    private static function getViewModel()
+    private static function getViewModel($task = false)
     {
         return [
-            'clients' => Client::scope()->with('contacts')->orderBy('name')->get(),
+            'clients' => Client::scope()->withActiveOrSelected($task ? $task->client_id : false)->with('contacts')->orderBy('name')->get(),
             'account' => Auth::user()->account,
-            'projects' => Project::scope()->with('client.contacts')->orderBy('name')->get(),
+            'projects' => Project::scope()->withActiveOrSelected($task ? $task->project_id : false)->with('client.contacts')->orderBy('name')->get(),
         ];
     }
 
@@ -257,10 +262,20 @@ class TaskController extends BaseController
     {
         $action = Input::get('action');
         $ids = Input::get('public_id') ?: (Input::get('id') ?: Input::get('ids'));
+        $referer = Request::server('HTTP_REFERER');
 
         if (in_array($action, ['resume', 'stop'])) {
             $this->taskRepo->save($ids, ['action' => $action]);
-            return Redirect::to('tasks')->withMessage(trans($action == 'stop' ? 'texts.stopped_task' : 'texts.resumed_task'));
+            Session::flash('message', trans($action == 'stop' ? 'texts.stopped_task' : 'texts.resumed_task'));
+            return $this->returnBulk($this->entityType, $action, $ids);
+        } elseif (strpos($action, 'update_status') === 0) {
+            list($action, $statusPublicId) = explode(':', $action);
+            Task::scope($ids)->update([
+                'task_status_id' => TaskStatus::getPrivateId($statusPublicId),
+                'task_status_sort_order' => 9999,
+            ]);
+            Session::flash('message', trans('texts.updated_task_status'));
+            return $this->returnBulk($this->entityType, $action, $ids);
         } elseif ($action == 'invoice' || $action == 'add_to_invoice') {
             $tasks = Task::scope($ids)->with('account', 'client', 'project')->orderBy('project_id', 'id')->get();
             $clientPublicId = false;
@@ -269,23 +284,21 @@ class TaskController extends BaseController
             $lastProjectId = false;
             foreach ($tasks as $task) {
                 if ($task->client) {
+                    if ($task->client->trashed()) {
+                        return redirect($referer)->withError(trans('texts.client_must_be_active'));
+                    }
+
                     if (! $clientPublicId) {
                         $clientPublicId = $task->client->public_id;
                     } elseif ($clientPublicId != $task->client->public_id) {
-                        Session::flash('error', trans('texts.task_error_multiple_clients'));
-
-                        return Redirect::to('tasks');
+                        return redirect($referer)->withError(trans('texts.task_error_multiple_clients'));
                     }
                 }
 
                 if ($task->is_running) {
-                    Session::flash('error', trans('texts.task_error_running'));
-
-                    return Redirect::to('tasks');
+                    return redirect($referer)->withError(trans('texts.task_error_running'));
                 } elseif ($task->invoice_id) {
-                    Session::flash('error', trans('texts.task_error_invoiced'));
-
-                    return Redirect::to('tasks');
+                    return redirect($referer)->withError(trans('texts.task_error_invoiced'));
                 }
 
                 $account = Auth::user()->account;

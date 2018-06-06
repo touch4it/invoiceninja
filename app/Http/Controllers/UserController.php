@@ -45,15 +45,6 @@ class UserController extends BaseController
         return $this->userService->getDatatable(Auth::user()->account_id);
     }
 
-    public function setTheme()
-    {
-        $user = User::find(Auth::user()->id);
-        $user->theme_id = Input::get('theme_id');
-        $user->save();
-
-        return Redirect::to(Input::get('path'));
-    }
-
     public function forcePDFJS()
     {
         $user = Auth::user();
@@ -118,7 +109,7 @@ class UserController extends BaseController
         }
 
         if (! Auth::user()->confirmed) {
-            Session::flash('error', trans('texts.confirmation_required'));
+            Session::flash('error', trans('texts.confirmation_required', ['link' => link_to('/resend_confirmation', trans('texts.click_here'))]));
 
             return Redirect::to('settings/' . ACCOUNT_USER_MANAGEMENT);
         }
@@ -400,5 +391,19 @@ class UserController extends BaseController
         }
 
         return RESULT_SUCCESS;
+    }
+
+    public function acceptTerms()
+    {
+        $ip = Request::getClientIp();
+        $referer = Request::server('HTTP_REFERER');
+        $message = '';
+
+        if (request()->accepted_terms && request()->accepted_privacy) {
+            auth()->user()->acceptLatestTerms($ip)->save();
+            $message = trans('texts.accepted_terms');
+        }
+
+        return redirect($referer)->withMessage($message);
     }
 }

@@ -6,10 +6,13 @@
     @endif
     <td>{{ trans('texts.expense_date') }}</td>
     <td>{{ trans('texts.amount') }}</td>
+    <td>{{ trans('texts.tax') }}</td>
+    <td>{{ trans('texts.currency') }}</td>
     <td>{{ trans('texts.category') }}</td>
     <td>{{ trans('texts.status') }}</td>
     <td>{{ trans('texts.public_notes') }}</td>
     <td>{{ trans('texts.private_notes') }}</td>
+    <td>{{ trans('texts.payment_type') }}</td>
     <td>{{ trans('texts.payment_date') }}</td>
     <td>{{ trans('texts.transaction_reference') }}</td>
 </tr>
@@ -23,10 +26,13 @@
         @endif
         <td>{{ $expense->present()->expense_date }}</td>
         <td>{{ $expense->present()->amount }}</td>
+        <td>{{ $expense->present()->taxAmount }}</td>
+        <td>{{ $expense->present()->currencyCode }}</td>
         <td>{{ $expense->present()->category }}</td>
         <td>{{ $expense->statusLabel() }}</td>
         <td>{{ $expense->public_notes }}</td>
         <td>{{ $expense->private_notes }}</td>
+        <td>{{ $expense->present()->payment_type }}</td>
         <td>{{ $expense->present()->payment_date }}</td>
         <td>{{ $expense->transaction_reference }}</td>
     </tr>

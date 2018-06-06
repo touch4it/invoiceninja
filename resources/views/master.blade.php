@@ -9,7 +9,7 @@
     @endif
     <meta charset="utf-8">
 
-    @if (Utils::isWhiteLabel() && ! isset($title))
+    @if (Utils::isWhiteLabel() && ! auth()->check())
         <title>{{ trans('texts.client_portal') }}</title>
         <link href="{{ asset('ic_cloud_circle.png') }}" rel="shortcut icon" type="image/png">
     @else
@@ -57,14 +57,29 @@
         var NINJA = NINJA || {};
         NINJA.fontSize = 9;
         NINJA.isRegistered = {{ \Utils::isRegistered() ? 'true' : 'false' }};
+        NINJA.loggedErrorCount = 0;
 
         window.onerror = function (errorMsg, url, lineNumber, column, error) {
+            if (NINJA.loggedErrorCount > 5) {
+                return;
+            }
+            NINJA.loggedErrorCount++;
+
             // Error in hosted third party library
             if (errorMsg.indexOf('Script error.') > -1) {
                 return;
             }
             // Error due to incognito mode
             if (errorMsg.indexOf('DOM Exception 22') > -1) {
+                return;
+            }
+            @if (Utils::isTravis())
+                if (errorMsg.indexOf('Attempting to change value of a readonly property') > -1) {
+                    return;
+                }
+            @endif
+            // Less than IE9 https://stackoverflow.com/a/14835682/497368
+            if (! document.addEventListener) {
                 return;
             }
             try {
@@ -75,6 +90,8 @@
                         gps.findFunctionName(result[0]).then(function (result) {
                             logError(errorMsg + ': ' + JSON.stringify(result));
                         });
+                    }).catch(function () {
+                        logError(errorMsg);
                     });
                 } else {
                     logError(errorMsg);
@@ -98,22 +115,42 @@
         }
 
         // http://t4t5.github.io/sweetalert/
-        function sweetConfirm(success, text, title) {
-            title = title || "{!! trans("texts.are_you_sure") !!}";
+        function sweetConfirm(successCallback, text, title, cancelCallback) {
+            title = title || {!! json_encode(trans("texts.are_you_sure")) !!};
             swal({
                 //type: "warning",
                 //confirmButtonColor: "#DD6B55",
                 title: title,
                 text: text,
-                cancelButtonText: "{!! trans("texts.no") !!}",
-                confirmButtonText: "{!! trans("texts.yes") !!}",
+                cancelButtonText: {!! json_encode(trans("texts.no")) !!},
+                confirmButtonText: {!! json_encode(trans("texts.yes")) !!},
                 showCancelButton: true,
                 closeOnConfirm: false,
                 allowOutsideClick: true,
             }).then(function() {
-                success();
+                successCallback();
                 swal.close();
+            }).catch(function() {
+                if (cancelCallback) {
+                    cancelCallback();
+                }
             });
+        }
+
+        function showPasswordStrength(password, score) {
+            if (password) {
+                var str = {!! json_encode(trans('texts.password_strength')) !!} + ': ';
+                if (password.length < 8 || score < 50) {
+                    str += {!! json_encode(trans('texts.strength_weak')) !!};
+                } else if (score < 75) {
+                    str += {!! json_encode(trans('texts.strength_good')) !!};
+                } else {
+                    str += {!! json_encode(trans('texts.strength_strong')) !!};
+                }
+                $('#passwordStrength').html(str);
+            } else {
+                $('#passwordStrength').html('&nbsp;');
+            }
         }
 
         /* Set the defaults for DataTables initialisation */
@@ -182,6 +219,31 @@
 
     </script>
 
+    <link rel="stylesheet" type="text/css" href="{{ asset('css/cookieconsent.min.css') }}"/>
+    <script src="{{ asset('js/cookieconsent.min.js') }}"></script>
+    <script>
+    window.addEventListener("load", function(){
+        if (! window.cookieconsent) {
+            return;
+        }
+        window.cookieconsent.initialise({
+            "palette": {
+                "popup": {
+                    "background": "#000"
+                },
+                "button": {
+                    "background": "#f1d600"
+                },
+            },
+            "content": {
+                "href": "{{ Utils::isNinja() ? config('ninja.privacy_policy_url.hosted') : 'https://cookiesandyou.com/' }}",
+                "message": {!! json_encode(trans('texts.cookie_message')) !!},
+                "dismiss": {!! json_encode(trans('texts.got_it')) !!},
+                "link": {!! json_encode(trans('texts.learn_more')) !!},
+            }
+        })}
+    );
+    </script>
 
     <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
     <!--[if lt IE 9]>
@@ -196,30 +258,6 @@
 <body class="body">
 
 @if (request()->phantomjs)
-    <script>
-        function trackEvent(category, action) {
-        }
-    </script>
-@elseif (Utils::isNinjaProd() && isset($_ENV['TAG_MANAGER_KEY']) && $_ENV['TAG_MANAGER_KEY'])
-    <!-- Google Tag Manager -->
-    <noscript>
-        <iframe src="//www.googletagmanager.com/ns.html?id={{ $_ENV['TAG_MANAGER_KEY'] }}"
-                height="0" width="0" style="display:none;visibility:hidden"></iframe>
-    </noscript>
-    <script>(function (w, d, s, l, i) {
-            w[l] = w[l] || [];
-            w[l].push({
-                'gtm.start': new Date().getTime(), event: 'gtm.js'
-            });
-            var f = d.getElementsByTagName(s)[0],
-                    j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : '';
-            j.async = true;
-            j.src =
-                    '//www.googletagmanager.com/gtm.js?id=' + i + dl;
-            f.parentNode.insertBefore(j, f);
-        })(window, document, 'script', 'dataLayer', '{{ $_ENV['TAG_MANAGER_KEY'] }}');</script>
-    <!-- End Google Tag Manager -->
-
     <script>
         function trackEvent(category, action) {
         }
@@ -239,7 +277,13 @@
         })(window, document, 'script', '//www.google-analytics.com/analytics.js', 'ga');
 
         ga('create', '{{ $_ENV['ANALYTICS_KEY'] }}', 'auto');
-        ga('send', 'pageview');
+        ga('set', 'anonymizeIp', true);
+
+        @if (request()->invitation_key || request()->proposal_invitation_key || request()->contact_key)
+            ga('send', 'pageview', { 'page': '/client/portal' });
+        @else
+            ga('send', 'pageview');
+        @endif
 
         function trackEvent(category, action) {
             ga('send', 'event', category, action, this.src);

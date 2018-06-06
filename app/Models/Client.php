@@ -6,6 +6,7 @@ use Carbon;
 use DB;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Laracasts\Presenter\PresentableTrait;
+use App\Models\Traits\HasCustomMessages;
 use Utils;
 
 /**
@@ -15,6 +16,7 @@ class Client extends EntityModel
 {
     use PresentableTrait;
     use SoftDeletes;
+    use HasCustomMessages;
 
     /**
      * @var string
@@ -61,6 +63,7 @@ class Client extends EntityModel
         'shipping_country_id',
         'show_tasks_in_portal',
         'send_reminders',
+        'custom_messages',
     ];
 
     /**
@@ -262,7 +265,7 @@ class Client extends EntityModel
         // check if this client wasRecentlyCreated to ensure a new contact is
         // always created even if the request includes a contact id
         if (! $this->wasRecentlyCreated && $publicId && $publicId != '-1') {
-            $contact = Contact::scope($publicId)->firstOrFail();
+            $contact = Contact::scope($publicId)->whereClientId($this->id)->firstOrFail();
         } else {
             $contact = Contact::createNew();
             $contact->send_invoice = true;
@@ -337,9 +340,17 @@ class Client extends EntityModel
      */
     public function getPrimaryContact()
     {
-        return $this->contacts()
-                    ->whereIsPrimary(true)
-                    ->first();
+        if (! $this->relationLoaded('contacts')) {
+            $this->load('contacts');
+        }
+
+        foreach ($this->contacts as $contact) {
+            if ($contact->is_primary) {
+                return $contact;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -349,15 +360,9 @@ class Client extends EntityModel
     {
         if ($this->name) {
             return $this->name;
+        } else if ($contact = $this->getPrimaryContact()) {
+            return $contact->getDisplayName();
         }
-
-        if (! count($this->contacts)) {
-            return '';
-        }
-
-        $contact = $this->contacts[0];
-
-        return $contact->getDisplayName();
     }
 
     /**
@@ -384,6 +389,29 @@ class Client extends EntityModel
     public function showMap()
     {
         return $this->hasAddress() && env('GOOGLE_MAPS_ENABLED') !== false;
+    }
+
+    /**
+     * @return bool
+     */
+    public function addressesMatch()
+    {
+        $fields = [
+            'address1',
+            'address2',
+            'city',
+            'state',
+            'postal_code',
+            'country_id',
+        ];
+
+        foreach ($fields as $field) {
+            if ($this->$field != $this->{'shipping_' . $field}) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

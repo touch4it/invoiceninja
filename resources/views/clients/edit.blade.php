@@ -4,6 +4,12 @@
 	$('input#name').focus();
 @stop
 
+@section('head')
+	@if (config('ninja.google_maps_api_key'))
+		@include('partials.google_geocode')
+	@endif
+@stop
+
 @section('content')
 
 @if ($errors->first('contacts'))
@@ -30,6 +36,7 @@
 	@else
 		{!! Former::populateField('invoice_number_counter', 1) !!}
 		{!! Former::populateField('quote_number_counter', 1) !!}
+		{!! Former::populateField('send_reminders', 1) !!}
 		@if ($account->client_number_counter)
 			{!! Former::populateField('id_number', $account->getNextNumber()) !!}
 		@endif
@@ -51,14 +58,8 @@
             {!! Former::text('website') !!}
 			{!! Former::text('work_phone') !!}
 
-			@if (Auth::user()->hasFeature(FEATURE_INVOICE_SETTINGS))
-				@if ($customLabel1)
-					{!! Former::text('custom_value1')->label(e($customLabel1)) !!}
-				@endif
-				@if ($customLabel2)
-					{!! Former::text('custom_value2')->label(e($customLabel2)) !!}
-				@endif
-			@endif
+
+			@include('partials/custom_fields', ['entityType' => ENTITY_CLIENT])
 
 			@if ($account->usesClientInvoiceCounter())
 				{!! Former::text('invoice_number_counter')->label('invoice_counter') !!}
@@ -92,7 +93,8 @@
 						{!! Former::text('address2') !!}
 						{!! Former::text('city') !!}
 						{!! Former::text('state') !!}
-						{!! Former::text('postal_code') !!}
+						{!! Former::text('postal_code')
+								->oninput(config('ninja.google_maps_api_key') ? 'lookupPostalCode()' : '') !!}
 						{!! Former::select('country_id')->addOption('','')
 							->fromQuery($countries, 'name', 'id') !!}
 
@@ -109,7 +111,9 @@
 						{!! Former::text('shipping_address2')->label('address2') !!}
 						{!! Former::text('shipping_city')->label('city') !!}
 						{!! Former::text('shipping_state')->label('state') !!}
-						{!! Former::text('shipping_postal_code')->label('postal_code') !!}
+						{!! Former::text('shipping_postal_code')
+								->oninput(config('ninja.google_maps_api_key') ? 'lookupPostalCode(true)' : '')
+								->label('postal_code') !!}
 						{!! Former::select('shipping_country_id')->addOption('','')
 							->fromQuery($countries, 'name', 'id')->label('country_id') !!}
 
@@ -149,19 +153,25 @@
                         attr: {name: 'contacts[' + \$index() + '][phone]'}") !!}
 				@if ($account->hasFeature(FEATURE_CLIENT_PORTAL_PASSWORD) && $account->enable_portal_password)
 					{!! Former::password('password')->data_bind("value: password()?'-%unchanged%-':'', valueUpdate: 'afterkeydown',
-						attr: {name: 'contacts[' + \$index() + '][password]'}")->autocomplete('new-password') !!}
+						attr: {name: 'contacts[' + \$index() + '][password]'}")->autocomplete('new-password')->data_lpignore('true') !!}
 			    @endif
 
 				@if (Auth::user()->hasFeature(FEATURE_INVOICE_SETTINGS))
-					@if ($account->custom_contact_label1)
-						{!! Former::text('custom_contact1')->data_bind("value: custom_value1, valueUpdate: 'afterkeydown',
-								attr: {name: 'contacts[' + \$index() + '][custom_value1]'}")
-							->label(e($account->custom_contact_label1)) !!}
+					@if ($account->customLabel('contact1'))
+						@include('partials.custom_field', [
+							'field' => 'custom_contact1',
+							'label' => $account->customLabel('contact1'),
+							'databind' => "value: custom_value1, valueUpdate: 'afterkeydown',
+									attr: {name: 'contacts[' + \$index() + '][custom_value1]'}",
+						])
 					@endif
-					@if ($account->custom_contact_label2)
-						{!! Former::text('custom_contact2')->data_bind("value: custom_value2, valueUpdate: 'afterkeydown',
-								attr: {name: 'contacts[' + \$index() + '][custom_value2]'}")
-							->label(e($account->custom_contact_label2)) !!}
+					@if ($account->customLabel('contact2'))
+						@include('partials.custom_field', [
+							'field' => 'custom_contact2',
+							'label' => $account->customLabel('contact2'),
+							'databind' => "value: custom_value2, valueUpdate: 'afterkeydown',
+									attr: {name: 'contacts[' + \$index() + '][custom_value2]'}",
+						])
 					@endif
 				@endif
 
@@ -194,6 +204,11 @@
 						<li role="presentation">
 							<a href="#notes" aria-controls="notes" role="tab" data-toggle="tab">{{ trans('texts.notes') }}</a>
 						</li>
+						@if (Utils::isPaidPro())
+							<li role="presentation">
+	                            <a href="#messages" aria-controls="messages" role="tab" data-toggle="tab">{{ trans('texts.messages') }}</a>
+	                        </li>
+						@endif
 						<li role="presentation">
 							<a href="#classify" aria-controls="classify" role="tab" data-toggle="tab">{{ trans('texts.classify') }}</a>
 						</li>
@@ -231,6 +246,15 @@
 						{!! Former::textarea('public_notes')->rows(6) !!}
 						{!! Former::textarea('private_notes')->rows(6) !!}
 					</div>
+					@if (Utils::isPaidPro())
+						<div role="tabpanel" class="tab-pane" id="messages">
+							@foreach (App\Models\Account::$customMessageTypes as $type)
+								{!! Former::textarea('custom_messages[' . $type . ']')
+										->placeholder($account->customMessage($type))
+										->label($type) !!}
+							@endforeach
+						</div>
+					@endif
 					<div role="tabpanel" class="tab-pane" id="classify">
 						{!! Former::select('size_id')->addOption('','')
 							->fromQuery($sizes, 'name', 'id') !!}
@@ -317,9 +341,11 @@
 		// button handles to copy the address
 		$('#copyBillingDiv button').click(function() {
 			copyAddress();
+			$('#copyBillingDiv').hide();
 		});
 		$('#copyShippingDiv button').click(function() {
 			copyAddress(true);
+			$('#copyShippingDiv').hide();
 		});
 
 		// show/hide buttons based on loaded values
@@ -413,7 +439,7 @@
 			if (self.contacts().length == 0) return '';
 			var contact = self.contacts()[0];
 			if (contact.first_name() || contact.last_name()) {
-				return contact.first_name() + ' ' + contact.last_name();
+				return (contact.first_name() || '') + ' ' + (contact.last_name() || '');
 			} else {
 				return contact.email();
 			}

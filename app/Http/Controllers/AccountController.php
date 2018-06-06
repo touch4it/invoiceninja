@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\SubdomainWasRemoved;
 use App\Events\SubdomainWasUpdated;
 use App\Events\UserSettingsChanged;
 use App\Events\UserSignedUp;
@@ -29,6 +30,7 @@ use App\Ninja\Repositories\ReferralRepository;
 use App\Services\AuthService;
 use App\Services\PaymentService;
 use App\Services\TemplateService;
+use Nwidart\Modules\Facades\Module;
 use Auth;
 use Cache;
 use File;
@@ -45,6 +47,7 @@ use Utils;
 
 use Validator;
 use View;
+use App\Jobs\PurgeClientData;
 
 /**
  * Class AccountController.
@@ -105,6 +108,7 @@ class AccountController extends BaseController
     public function getStarted()
     {
         $user = false;
+        $account = false;
         $guestKey = Input::get('guest_key'); // local storage key to login until registered
 
         if (Auth::check()) {
@@ -131,7 +135,18 @@ class AccountController extends BaseController
         Auth::login($user, true);
         event(new UserSignedUp());
 
-        $redirectTo = Input::get('redirect_to') ? SITE_URL . '/' . ltrim(Input::get('redirect_to'), '/') : 'invoices/create';
+        if ($account && $account->language_id && $account->language_id != DEFAULT_LANGUAGE) {
+            $link = link_to('/invoices/create?lang=en', 'click here');
+            $message = sprintf('Your account language has been set automatically, %s to change to English', $link);
+            Session::flash('warning', $message);
+        }
+
+        if ($redirectTo = Input::get('redirect_to')) {
+            $redirectTo = SITE_URL . '/' . ltrim($redirectTo, '/');
+        } else {
+            $redirectTo = Input::get('sign_up') ? 'dashboard' : 'invoices/create';
+        }
+
         return Redirect::to($redirectTo)->with('sign_up', Input::get('sign_up'));
     }
 
@@ -177,7 +192,7 @@ class AccountController extends BaseController
 
             $days_total = $planDetails['paid']->diff($planDetails['expires'])->days;
             $percent_used = $days_used / $days_total;
-            $credit = floatval($company->payment->amount) * (1 - $percent_used);
+            $credit = round(floatval($company->payment->amount) * (1 - $percent_used), 2);
         }
 
         if ($newPlan['price'] > $credit) {
@@ -186,6 +201,10 @@ class AccountController extends BaseController
         } else {
             if ($plan == PLAN_FREE) {
                 $company->discount = 0;
+
+                $ninjaClient = $this->accountRepo->getNinjaClient($account);
+                $ninjaClient->send_reminders = false;
+                $ninjaClient->save();
             } else {
                 $company->plan_term = $term;
                 $company->plan_price = $newPlan['price'];
@@ -288,13 +307,18 @@ class AccountController extends BaseController
         } elseif ($section === ACCOUNT_SYSTEM_SETTINGS) {
             return self::showSystemSettings();
         } else {
+            $view = "accounts.{$section}";
+            if (! view()->exists($view)) {
+                return redirect('/settings/company_details');
+            }
+
             $data = [
                 'account' => Account::with('users')->findOrFail(Auth::user()->account_id),
                 'title' => trans("texts.{$section}"),
                 'section' => $section,
             ];
 
-            return View::make("accounts.{$section}", $data);
+            return View::make($view, $data);
         }
     }
 
@@ -369,10 +393,12 @@ class AccountController extends BaseController
     private function showAccountManagement()
     {
         $account = Auth::user()->account;
-        $planDetails = $account->getPlanDetails(true);
+        $planDetails = $account->getPlanDetails(true, false);
         $portalLink = false;
 
-        if (Utils::isNinja() && $planDetails && $ninjaClient = $this->accountRepo->getNinjaClient($account)) {
+        if (Utils::isNinja() && $planDetails
+            && $account->getPrimaryAccount()->id == auth()->user()->account_id
+            && $ninjaClient = $this->accountRepo->getNinjaClient($account)) {
             $contact = $ninjaClient->getPrimaryContact();
             $portalLink = $contact->link;
         }
@@ -392,6 +418,10 @@ class AccountController extends BaseController
      */
     public function showUserDetails()
     {
+        if (! auth()->user()->registered) {
+            return redirect('/')->withError(trans('texts.sign_up_to_save'));
+        }
+
         $oauthLoginUrls = [];
         foreach (AuthService::$providers as $provider) {
             $oauthLoginUrls[] = ['label' => $provider, 'url' => URL::to('/auth/'.strtolower($provider))];
@@ -448,11 +478,11 @@ class AccountController extends BaseController
     {
         $account = Auth::user()->account;
         $account->load('account_gateways');
-        $count = count($account->account_gateways);
+        $count = $account->account_gateways->count();
         $trashedCount = AccountGateway::scope()->withTrashed()->count();
 
         if ($accountGateway = $account->getGatewayConfig(GATEWAY_STRIPE)) {
-            if (! $accountGateway->getPublishableStripeKey()) {
+            if (! $accountGateway->getPublishableKey()) {
                 Session::now('warning', trans('texts.missing_publishable_key'));
             }
         }
@@ -522,45 +552,78 @@ class AccountController extends BaseController
     private function showInvoiceDesign($section)
     {
         $account = Auth::user()->account->load('country');
-        $invoice = new stdClass();
-        $client = new stdClass();
-        $contact = new stdClass();
-        $invoiceItem = new stdClass();
-        $document = new stdClass();
 
-        $client->name = 'Sample Client';
-        $client->address1 = '10 Main St.';
-        $client->city = 'New York';
-        $client->state = 'NY';
-        $client->postal_code = '10000';
-        $client->work_phone = '(212) 555-0000';
-        $client->work_email = 'sample@example.com';
-        $client->balance = 100;
+        if ($invoice = Invoice::scope()->invoices()->orderBy('id')->first()) {
+            $invoice->load('account', 'client.contacts', 'invoice_items');
+            $invoice->invoice_date = Utils::fromSqlDate($invoice->invoice_date);
+            $invoice->due_date = Utils::fromSqlDate($invoice->due_date);
+        } else {
+            $client = new stdClass();
+            $contact = new stdClass();
+            $invoiceItem = new stdClass();
+            $document = new stdClass();
 
-        $invoice->invoice_number = '0000';
-        $invoice->invoice_date = Utils::fromSqlDate(date('Y-m-d'));
-        $invoice->account = json_decode($account->toJson());
-        $invoice->amount = $invoice->balance = 100;
+            $client->name = 'Sample Client';
+            $client->address1 = '10 Main St.';
+            $client->city = 'New York';
+            $client->state = 'NY';
+            $client->postal_code = '10000';
+            $client->work_phone = '(212) 555-0000';
+            $client->work_email = 'sample@example.com';
+            $client->balance = 100;
+            $client->vat_number = $account->vat_number ? '1234567890' : '';
+            $client->id_number = $account->id_number ? '1234567890' : '';
 
-        $invoice->terms = trim($account->invoice_terms);
-        $invoice->invoice_footer = trim($account->invoice_footer);
+            if ($account->customLabel('client1')) {
+                $client->custom_value1 = '0000';
+            }
+            if ($account->customLabel('client2')) {
+                $client->custom_value2 = '0000';
+            }
 
-        $contact->first_name = 'Test';
-        $contact->last_name = 'Contact';
-        $contact->email = 'contact@gmail.com';
-        $client->contacts = [$contact];
+            $invoice = new stdClass();
+            $invoice->invoice_number = '0000';
+            $invoice->invoice_date = Utils::fromSqlDate(date('Y-m-d'));
+            $invoice->account = json_decode($account->toJson());
+            $invoice->amount = $invoice->balance = 100;
 
-        $invoiceItem->cost = 100;
-        $invoiceItem->qty = 1;
-        $invoiceItem->notes = 'Notes';
-        $invoiceItem->product_key = 'Item';
+            if ($account->customLabel('invoice_text1')) {
+                $invoice->custom_text_value1 = '0000';
+            }
+            if ($account->customLabel('invoice_text2')) {
+                $invoice->custom_text_value2 = '0000';
+            }
 
-        $document->base64 = 'data:image/jpeg;base64,/9j/4QAYRXhpZgAASUkqAAgAAAAAAAAAAAAAAP/sABFEdWNreQABAAQAAAAyAAD/7QAsUGhvdG9zaG9wIDMuMAA4QklNBCUAAAAAABAAAAAAAAAAAAAAAAAAAAAA/+4AIUFkb2JlAGTAAAAAAQMAEAMDBgkAAAW8AAALrQAAEWf/2wCEAAgGBgYGBggGBggMCAcIDA4KCAgKDhANDQ4NDRARDA4NDQ4MEQ8SExQTEg8YGBoaGBgjIiIiIycnJycnJycnJycBCQgICQoJCwkJCw4LDQsOEQ4ODg4REw0NDg0NExgRDw8PDxEYFhcUFBQXFhoaGBgaGiEhICEhJycnJycnJycnJ//CABEIAGQAlgMBIgACEQEDEQH/xADtAAABBQEBAAAAAAAAAAAAAAAAAQIDBAUGBwEBAAMBAQEAAAAAAAAAAAAAAAIDBAUBBhAAAQQCAQMDBQEAAAAAAAAAAgABAwQRBRIQIBMwIQYxIiMUFUARAAIBAgMFAwgHBwUBAAAAAAECAwARIRIEMUFRYROhIkIgcYGRsdFSIzDBMpKyFAVA4WJyM0MkUPGiU3OTEgABAgQBCQYEBwAAAAAAAAABEQIAITESAyBBUWFxkaGxIhAwgdEyE8HxYnLw4UJSgiMUEwEAAgIBAwQCAwEBAAAAAAABABEhMVFBYXEQgZGhILEwwdHw8f/aAAwDAQACEQMRAAAA9ScqiDlGjgRUUcqSCOVfTEeETZI/TABQBHCxAiDmcvz1O3rM7i7HG29J1nGW6c/ZO4i1ry9ZZwJOzk2Gc11N8YVe6FsZKEQqwR8v0vnEpz4isza7FaovCjNThxulztSxiz6597PwkfQ99R6vxT0S7N2yuXJpQceKrkIq3L9kK/OuR9F8rpjCsmdZXLUN+H0Obp9Hp8azkdPd1q58T21bV6XK6dcjW2UPGl0amXp5VdnIV3c5n6t508/srbbd+3Hbl2Ib8GXV2E59tXOvLwNmfv5sueVzWhPqsNggNdcKwOifnXlS4iDvkho4bP8ASEeyPrpZktFYLMbCPudZsNzzcsTdVc5CemqECqHoAEQBABXAOABAGtD0AH//2gAIAQIAAQUB9TkSnkPEFiKNhvcnhfysQuPbJwZijLkNUGZicWCZ3X1DsIRdZZlnKmPMnOImhsWBQSifR/o7sy+5fb0OIuU8EblCBxtFGQv14ssdjQxMXqf/2gAIAQMAAQUB9Qa5LwxipBck8bMjIY0BsXYJ4Q2QT2BdFK7uMGW/QJmKIo5OrimGZ0MDm4xjEw+PMhDibBi7Y6DjkIkT/iZn8uEzoSLBYdE7dcrzGmkFn68nx6n/2gAIAQEAAQUB9HCwsLHq5XJkxC/+ByZmsbSpCi2JG3GOM68rcOZOuU7IJuRJ+uFjsd8K1tCE55wIYpBYqrzHIAQlKdmty5KG6POC2RSTXwjUGxm8ywsLHX6KMJLrXNdLXCarQd4jeY5ZrHmLYwk0Vo5k85FJZlPjTOxYDySNa2H4wpTNYrLHZKQxhHJsHGzYsRFHe17KbYHI5tVZeGlxI67yOZmTx2wYbDpmsSu9iKCL49M/DtswNZrjb2GvjtW9XsY/EKliOSQXAXnaubRQ2JWoNJWvXbu1G0FmS0MOur+L+VPKNGs0FzvvaSjZUma8xwX5isVyhUFOWwUGg2LtV+OiSOnLAMNeig1tJ1Jr5RNor9Zq91pHz12N0dfTCtvbkcl7f6xr/wAjjvUKW3LgWv2VlRaXVg8NWnHG1aBNBaFmmtiQVDIJIJIyCyYEF1ibDSms9NlUa/THY7vXtb2tSzshj+JbBF8TeI/2vklNVvkVOeV61ck9SB1+qQLx3UVa9C47HDhHDJKEQw2eS5LKz0wzqbX1LCsfF6Mqajv6S/s7eurtmbeRg/EeS5LKyjCORnpCzxxNGsrksrKysrKysrKysrKysrKysrPXK917r3Xuvde/rf/aAAgBAgIGPwHvOlq6z0t3wbnNAFWg1+mS84LiQC6drJgfCJYTrf3UHlxhWA1T8GJ5KEF1aRb7YaD6cNovcmcn5xPDnXq6o9QaIQ9Z1S/OC3OyfgckXL/FxaeESBHjAkvARd7RxGNVtLgNJatYH+XG9p6+k9LdgFF2Q9uJhh7gJoUcQaEKoO8QUUJUGRG3slFSDrhQVifHsuY8jV6m7s3hDi9rsIn9Y6mH7tEe5h4oQuDNN2YIDDnPdc5yUCBBSU8jRsiuReGNu0pPvf/aAAgBAwIGPwHvFdLnEq6awBXWUhC8LojqcIlkETU6NEI5xJGq3eYJYiCpJQecJ7hI0Ycod/SVdS4pxcnKFb0pWrifhxgPUFuJ0+I05CgpEgHbacYAMytEoBXq+cG1zcMlM1x5+UTMzUhGkmEtKZ86iGNCMa1yyElHLtF1FnsijXN+kDdmi1zS3OLgUWJIn0JyHYhA5GJG7VQwhGZdkIM2Qh6vunzi4MC7Sm7IRe9//9oACAEBAQY/Af2u18eH7Bjsq2bO3wpjQUrldsRED3wvxGlkGpbvYAtgQeOHDzVYTdf+I7f+N/ZXcYX4Gx/CQeysYwfM1vxCspRkPP3j6MxQAYYGR9noG+i+q1Dtw8CUrRfNP2sO6gA8TE7qkeRMkUpvfHPMeWw5aMussuXBIr7uYW/qoJFpgzHYcAMOdXkyIN1+9b0sbVkXW7d+FhblsrLJKGTaGAC+uu4Q5pV1GQxObBk8J3X+g6rgvcmwZssY5ALiaZxNg7fZC4JzBONXn62olH/YTl7KJy5kG24GUEbBYbbbhXXDBpVwyKLqF3hicMaPX06cdpAvzzHGm6EkcEY4WUdgzH0CssbjUMONx3ud8ppRPpelN4Zdg9GXbSZFjY+IsQT90mo5XcRMD0mVAtrfFaszsGK3ubANy+ztxqOXiMfP5TPJgqgsTyFGXTuNPBISVVw5w43AIpfzMqzq++KS34lwodXSl5PCSc/Ze1dOJQFawyLhbje9hQSR3aTeLgKvIZb+2nZ5cbd1AM3o3UhddgtfxYbMBWWOMkbl/wBsTV54nEe0KFbtNArkj4bj7GolXTL8Ze1z671G6SNK4/qxnvxm+BymwtUulP8AbN18x8qSC9uopW/npYtVozLHGMomgN8Bh9miA/SnA7okGUE8G3dtG36fKrn+7G90B4gi+FWnMmYWsxxJvwzWvsoxh2yri4Pd5bi9Hpl5bDFU7q+ktc9lHoBQvEkAe+o1lkUByEkZTsW/xCpAJzB02ISFLgADZev8zRpqD8QBVv8A6Jann0yNplkFssq9RVIO0MmK7N4oMZBKhPe6FmHZa3qqPKdkdpBwPD6Bpf6L4szqbDmTfCsn6fqGmO54wV9m2upqcyse6WlNvRdhXSzJlOLMDm9GFZNMjytwQfXWX8uYv59nrx9lP+aPUbYFUlFHp2mguqTqxKLJK+LKP/VMfWKvKrsu5y5ZfWmFdTRytAx8UbYdtxQMpDFjhqYflSA7s4XBquttRz2NaunIpR+DeRJqiuYrgq8WOAoaiXVPEzYqkZCKOVt9X1DJPFsvKMp+8hqTStE0Er2xBDobG5FxY40kGi02nifZfMSSfNtr/OlcRHwxKO0A3q8smduDfL/FXTiQCPbbKHHrF6+WbH+B3TsufZRyTSfyu1/usR7ayPKM3wulj2VnAVGOJTZjxBGNZiuVvi+w331wPprLIbkbn7resd013hbz4fupbDYb38iTTE2z7DzGIoJrNN+ZjXDOO61h5rg0mp1Wmkk0yplEDG2Vt5wwNWH+NIdxJj9t1pZ/0/V5WQhk6gvzGI91fP0sesUeKI5W9X7qXTauJ9JM2AWYd0nhermNb+a3srxfeP118qdhyYBhWEkf81jf1Vnim658QfA+giulqUyNwbC/1GiLfLOOU7jypek3d8Q3Vw8r5sKt6PdV4i0Z5Yjtq2k1YmQbI5cfxe+ra39OLD44fd3qXSQaJ0uwJnlFsluFBSb2Fr+TldQw518pynLaO2rli7cT9Q/0r//aAAgBAgMBPxD8BHIj4/gUu+n/AKDL7Eqh2LDnpJp36uxcBVJSQBqzju2/1Mo/rVB3tkuO1ZHHZYne4pQ3+A1jS9SIA5pdrL6FN29E1HHIwAiNNrOl06RtUaBbO7u6gApbHBXuAv3EB7MGADleztFGRKsm7wY7RPX6jyyGlEcPVK65Tfd263KMLBdl5vh/uDZC0O5wdmKVo4YKKAOVMbNnutFAI9eEuQ4e6ahKuKj2+B/en0tbqrHmAfYICaGFNJdQyMh/5uV4l03drL4SfIR6aL1b1BlPXXmNhFlAM7NwL0U7zACUS0VtC3J6+u9zqhb2fqLSlI+JcuIO5SQ4R9ofyf/aAAgBAwMBPxD+RAWF0BeXwHuzQV9CbX26fUGyI3Q+OsxIrVsvtv6l5UovefjcHV637+PwAhSpEW03npcCcYFf6CUJoVSLxaKfBDaWsSw47vyTCEodeVls2/8AUQ7CBsMHauvOIZ9gwKrOdefH4MthVWOO9y9BzaCnDeJ8kzpIwbaLNkqtAQS0QFwTYlN+IQGULuC0pXHSWlpFWocCQV3A4dhwVblrrFrfXSZH08asO7MfiaKWfA2PeN7MUMgK5fu4Urrgge+T6jfLDqw7/wBkMAgG2DxzG9uzsd1xQBRbbbn1ENij2hXaE6AkMCOSsjnKOW/Qai9iTi/5f//aAAgBAQMBPxAIEqVKlSpUCEHoUiRjGX6BAlSpUqIIaIhUI6G34hXMIeiRjE9OkqB63HygG1aCOt3TKzCFkCino59iplOlzY8tvCMIxuwf0/mBqJ40DUb89L4/sgg43QRGuFT0ESVfo0gRlyha0dVlpKlKrm6raQySjYol1lVfgj8C3g6iJbHNxPeAW9yDaQdgrpMZAK1eq2o7Q7EFEVS8X6HaIQYrdr7U0YQobDxRja4mPhsgnSp/cLbjYA4K51OOKoU0zRiegjSEq4oFegvxGpy4QRr5JcRHqajXulVBqlghaxQnLR092G41E0g3djqcHWMXuExr0VmhZdW7FsLT+gynKYpXXjGV7wreJppoapXL7oQD0sBYvCAX4tIpESrHmFyooWQqCbMCN1vpBgtacBgtAYVZcF7afsYf9lQisQlRdvDkWyqGZBthXx7RPvKkUrlb5Q/CrdFT5neoWdIZSWgR/VBQwZ0nUGPeBAJdZvWE38qghbIlumjVcdMzdAL5o/BAVDYFa5xT2qVhDQIAA5pB+5aemryoxhX0jk3pALPvUXhzAK5y/XUnskCEqEqMLSHNUwwLAQBRotLMeIdlDn5FpRZUUm5R2ZJ7EpNZRMobAO5K5hOAUuBYHYG+8SddNHz0+EKEOCcKzlT1BZYb4uB90OpYUAVM2rcL3vCknNK+bjWGKs6bZa9oVhmRdpg/YWAAlUVJkcjdXD11Lgke0VcU2MbHfygaFKWEnTL5GJZzMyGuGMPMbSQlbPagPOZaKOHjusEyaLtXgeW3iK4+oDc4bNYnwcKiQaks/Caxh5wK7kdeZvb3LEJhAMqbKrhAqim522Qv5gPgqp9FxlL7mnZpXi3MxIMgDkG/ug65qHbsEF8zXvjwBFAU4jmwArRmKjV6XLdNd1TvoiF1X5vX/fMHBChWDvd+4paeJz4FDgzLjs70CdhHznQBjzv7Sxo8bd2NfcZmYNWs8RxQGYGe1+olGV9n7Z+0UPFyYwlYvmDNJctGQPGwnyQAWPv0haPhQ4abtsUxZfaFBalqvypK8pGizJpYO+aShBw+h2xgHf3CNeSAXzRnTRxS/szKo3P+IMAszsGE7iUiOwZy99tXZg3BCqz2L+qH0gU09RzxfaMDrstvwgKoDsPRrCLj7jcKSy6oH5pLZC0I+L/UPAvRNDQUa9oMU7aNedH3NWIKBWuO+m4lsAS60VfopKsCajNR6AT7l8D418EaQCisod0YIUK9U/PBh6loQegqKly/QfkBmNzMzM/i+jOk/9k=';
+            $invoice->terms = trim($account->invoice_terms);
+            $invoice->invoice_footer = trim($account->invoice_footer);
 
-        $invoice->client = $client;
-        $invoice->invoice_items = [$invoiceItem];
-        //$invoice->documents = $account->hasFeature(FEATURE_DOCUMENTS) ? [$document] : [];
-        $invoice->documents = [];
+            $contact->first_name = 'Test';
+            $contact->last_name = 'Contact';
+            $contact->email = 'contact@gmail.com';
+            $client->contacts = [$contact];
+
+            $invoiceItem->cost = 100;
+            $invoiceItem->qty = 1;
+            $invoiceItem->notes = 'Notes';
+            $invoiceItem->product_key = 'Item';
+            $invoiceItem->discount = 10;
+            $invoiceItem->tax_name1 = 'Tax';
+            $invoiceItem->tax_rate1 = 10;
+
+            if ($account->customLabel('product1')) {
+                $invoiceItem->custom_value1 = '0000';
+            }
+            if ($account->customLabel('product2')) {
+                $invoiceItem->custom_value2 = '0000';
+            }
+
+            $document->base64 = 'data:image/jpeg;base64,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';
+
+            $invoice->client = $client;
+            $invoice->invoice_items = [$invoiceItem];
+            //$invoice->documents = $account->hasFeature(FEATURE_DOCUMENTS) ? [$document] : [];
+            $invoice->documents = [];
+        }
 
         $data['account'] = $account;
         $data['invoice'] = $invoice;
@@ -584,21 +647,6 @@ class AccountController extends BaseController
                 $data['customDesign'] = $custom;
             } else {
                 $data['customDesign'] = $design;
-            }
-
-            // sample invoice to help determine variables
-            $invoice = Invoice::scope()
-                            ->invoiceType(INVOICE_TYPE_STANDARD)
-                            ->with('client', 'account')
-                            ->where('is_recurring', '=', false)
-                            ->first();
-
-            if ($invoice) {
-                $invoice->hidePrivateFields();
-                unset($invoice->account);
-                unset($invoice->invoice_items);
-                unset($invoice->client->contacts);
-                $data['sampleInvoice'] = $invoice;
             }
         }
 
@@ -718,6 +766,22 @@ class AccountController extends BaseController
         $account = $user->account;
         $modules = Input::get('modules');
 
+        if (Utils::isSelfHost()) {
+            // get all custom modules, including disabled
+            $custom_modules = collect(Input::get('custom_modules'))->each(function ($item, $key) {
+                $module = Module::find($item);
+                if ($module && $module->disabled()) {
+                    $module->enable();
+                }
+            });
+
+            (Module::toCollection()->diff($custom_modules))->each(function ($item, $key) {
+                if ($item->enabled()) {
+                    $item->disable();
+                }
+            });
+        }
+
         $user->force_pdfjs = Input::get('force_pdfjs') ? true : false;
         $user->save();
 
@@ -731,7 +795,7 @@ class AccountController extends BaseController
 
             return $font->id == $account->header_font_id || $font->id == $account->body_font_id;
         });
-        if ($account->live_preview && count($fonts)) {
+        if ($account->live_preview && $fonts->count()) {
             $account->live_preview = false;
             Session::flash('warning', trans('texts.live_preview_disabled'));
         }
@@ -782,18 +846,28 @@ class AccountController extends BaseController
             }
         }
 
+
+        (bool) $fireUpdateSubdomainEvent = false;
+
         if ($account->subdomain !== $request->subdomain) {
-            event(new SubdomainWasUpdated($account));
+            $fireUpdateSubdomainEvent = true;
+            event(new SubdomainWasRemoved($account));
         }
 
         $account->fill($request->all());
         $account->client_view_css = $request->client_view_css;
-		$account->subdomain = $request->subdomain;
+        $account->subdomain = $request->subdomain;
         $account->iframe_url = $request->iframe_url;
+        $account->is_custom_domain = $request->is_custom_domain;
         $account->save();
 
+        if ($fireUpdateSubdomainEvent) {
+            event(new SubdomainWasUpdated($account));
+        }
+
+
         return redirect('settings/' . ACCOUNT_CLIENT_PORTAL)
-                ->with('message', trans('texts.updated_settings'));
+            ->with('message', trans('texts.updated_settings'));
     }
 
     /**
@@ -810,7 +884,7 @@ class AccountController extends BaseController
         $settings->save();
 
         return redirect('settings/' . ACCOUNT_EMAIL_SETTINGS)
-                ->with('message', trans('texts.updated_settings'));
+            ->with('message', trans('texts.updated_settings'));
     }
 
     /**
@@ -842,6 +916,9 @@ class AccountController extends BaseController
                 $account->account_email_settings->{"late_fee{$number}_amount"} = Input::get("late_fee{$number}_amount");
                 $account->account_email_settings->{"late_fee{$number}_percent"} = Input::get("late_fee{$number}_percent");
             }
+
+            $account->enable_reminder4 = Input::get('enable_reminder4') ? true : false;
+            $account->account_email_settings->frequency_id_reminder4 = Input::get('frequency_id_reminder4');
 
             $account->save();
             $account->account_email_settings->save();
@@ -875,6 +952,7 @@ class AccountController extends BaseController
 
         $account->fill_products = Input::get('fill_products') ? true : false;
         $account->update_products = Input::get('update_products') ? true : false;
+        $account->convert_products = Input::get('convert_products') ? true : false;
         $account->save();
 
         Session::flash('message', trans('texts.updated_settings'));
@@ -906,23 +984,11 @@ class AccountController extends BaseController
                     ->withInput();
             } else {
                 $account = Auth::user()->account;
-                $account->custom_label1 = trim(Input::get('custom_label1'));
-                $account->custom_value1 = trim(Input::get('custom_value1'));
-                $account->custom_label2 = trim(Input::get('custom_label2'));
-                $account->custom_value2 = trim(Input::get('custom_value2'));
-                $account->custom_client_label1 = trim(Input::get('custom_client_label1'));
-                $account->custom_client_label2 = trim(Input::get('custom_client_label2'));
-                $account->custom_contact_label1 = trim(Input::get('custom_contact_label1'));
-                $account->custom_contact_label2 = trim(Input::get('custom_contact_label2'));
-                $account->custom_invoice_label1 = trim(Input::get('custom_invoice_label1'));
-                $account->custom_invoice_label2 = trim(Input::get('custom_invoice_label2'));
+                $account->custom_value1 = Input::get('custom_value1');
+                $account->custom_value2 = Input::get('custom_value2');
                 $account->custom_invoice_taxes1 = Input::get('custom_invoice_taxes1') ? true : false;
                 $account->custom_invoice_taxes2 = Input::get('custom_invoice_taxes2') ? true : false;
-                $account->custom_invoice_text_label1 = trim(Input::get('custom_invoice_text_label1'));
-                $account->custom_invoice_text_label2 = trim(Input::get('custom_invoice_text_label2'));
-                $account->custom_invoice_item_label1 = trim(Input::get('custom_invoice_item_label1'));
-                $account->custom_invoice_item_label2 = trim(Input::get('custom_invoice_item_label2'));
-
+                $account->custom_fields = request()->custom_fields;
                 $account->invoice_number_padding = Input::get('invoice_number_padding');
                 $account->invoice_number_counter = Input::get('invoice_number_counter');
                 $account->quote_number_prefix = Input::get('quote_number_prefix');
@@ -931,6 +997,9 @@ class AccountController extends BaseController
                 $account->invoice_footer = Input::get('invoice_footer');
                 $account->quote_terms = Input::get('quote_terms');
                 $account->auto_convert_quote = Input::get('auto_convert_quote');
+                $account->auto_archive_quote = Input::get('auto_archive_quote');
+                $account->auto_archive_invoice = Input::get('auto_archive_invoice');
+                $account->auto_email_invoice = Input::get('auto_email_invoice');
                 $account->recurring_invoice_number_prefix = Input::get('recurring_invoice_number_prefix');
 
                 $account->client_number_prefix = trim(Input::get('client_number_prefix'));
@@ -961,8 +1030,8 @@ class AccountController extends BaseController
                 }
 
                 if (! $account->share_counter
-                        && $account->invoice_number_prefix == $account->quote_number_prefix
-                        && $account->invoice_number_pattern == $account->quote_number_pattern) {
+                    && $account->invoice_number_prefix == $account->quote_number_prefix
+                    && $account->invoice_number_pattern == $account->quote_number_pattern) {
                     Session::flash('error', trans('texts.invalid_counter'));
 
                     return Redirect::to('settings/'.ACCOUNT_INVOICE_SETTINGS)->withInput();
@@ -996,6 +1065,7 @@ class AccountController extends BaseController
             $account->quote_design_id = Input::get('quote_design_id');
             $account->font_size = intval(Input::get('font_size'));
             $account->page_size = Input::get('page_size');
+            $account->background_image_id = Document::getPrivateId(request()->background_image_id);
 
             $labels = [];
             foreach (Account::$customLabels as $field) {
@@ -1022,6 +1092,7 @@ class AccountController extends BaseController
         $user->notify_viewed = Input::get('notify_viewed');
         $user->notify_paid = Input::get('notify_paid');
         $user->notify_approved = Input::get('notify_approved');
+        $user->slack_webhook_url = Input::get('slack_webhook_url');
         $user->save();
 
         $account = $user->account;
@@ -1220,6 +1291,7 @@ class AccountController extends BaseController
         $account->token_billing_type_id = Input::get('token_billing_type_id');
         $account->auto_bill_on_due_date = boolval(Input::get('auto_bill_on_due_date'));
         $account->gateway_fee_enabled = boolval(Input::get('gateway_fee_enabled'));
+        $account->send_item_details = boolval(Input::get('send_item_details'));
 
         $account->save();
 
@@ -1265,8 +1337,8 @@ class AccountController extends BaseController
         }
 
         $email = User::withTrashed()->where('email', '=', $email)
-                                    ->where('id', '<>', $user->registered ? 0 : $user->id)
-                                    ->first();
+            ->where('id', '<>', $user->registered ? 0 : $user->id)
+            ->first();
 
         if ($email) {
             return 'taken';
@@ -1281,6 +1353,7 @@ class AccountController extends BaseController
     public function submitSignup()
     {
         $user = Auth::user();
+        $ip = Request::getClientIp();
         $account = $user->account;
 
         $rules = [
@@ -1312,6 +1385,7 @@ class AccountController extends BaseController
         if ($user->registered) {
             $newAccount = $this->accountRepo->create($firstName, $lastName, $email, $password, $account->company);
             $newUser = $newAccount->users()->first();
+            $newUser->acceptLatestTerms($ip)->save();
             $users = $this->accountRepo->associateAccounts($user->id, $newUser->id);
 
             Session::flash('message', trans('texts.created_new_company'));
@@ -1326,12 +1400,13 @@ class AccountController extends BaseController
             $user->username = $user->email;
             $user->password = bcrypt($password);
             $user->registered = true;
+            $user->acceptLatestTerms($ip);
             $user->save();
 
             $user->account->startTrial(PLAN_PRO);
 
             if (Input::get('go_pro') == 'true') {
-                Session::set(REQUESTED_PRO_PLAN, true);
+                session([REQUESTED_PRO_PLAN => true]);
             }
 
             return "{$user->first_name} {$user->last_name}";
@@ -1407,7 +1482,7 @@ class AccountController extends BaseController
             $refunded = $company->processRefund(Auth::user());
 
             $ninjaClient = $this->accountRepo->getNinjaClient($account);
-            $ninjaClient->delete();
+            dispatch(new \App\Jobs\PurgeClientData($ninjaClient));
         }
 
         Document::scope()->each(function ($item, $key) {
@@ -1474,8 +1549,8 @@ class AccountController extends BaseController
     {
         $template = Input::get('template');
         $invitation = \App\Models\Invitation::scope()
-                        ->with('invoice.client.contacts')
-                        ->first();
+            ->with('invoice.client.contacts')
+            ->first();
 
         if (! $invitation) {
             return trans('texts.create_invoice_for_sample');

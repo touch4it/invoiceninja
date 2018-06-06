@@ -1,14 +1,22 @@
 <script type="text/javascript">
 
-    function renderEmailTemplate(str, invoice, isQuote) {
+    function renderEmailTemplate(str, invoice, entityType) {
         if (!str) {
             return '';
         }
 
-        var passwordHtml = "{!! $account->isPro() && $account->enable_portal_password && $account->send_portal_password?'<br/>'.trans('texts.password').': XXXXXXXXX<br/>':'' !!}";
+        if (invoice && invoice.invoice_type_id == {{ INVOICE_TYPE_QUOTE }} || entityType == '{{ ENTITY_QUOTE }}') {
+            var viewButton = {!! json_encode(Form::flatButton('view_quote', '#0b4d78')) !!} + '$password';
+        } else if (entityType == '{{ ENTITY_PROPOSAL }}') {
+            var viewButton = {!! json_encode(Form::flatButton('view_proposal', '#0b4d78')) !!} + '$password';
+        } else {
+            var viewButton = {!! json_encode(Form::flatButton('view_invoice', '#0b4d78')) !!} + '$password';
+        }
+
+        var passwordHtml = {!! $account->isPro() && $account->enable_portal_password && $account->send_portal_password ? json_encode('<br/>' . trans('texts.password') . ': XXXXXXXXX<br/>') : json_encode('') !!};
 
         @if ($account->isPro())
-            var documentsHtml = "{!! trans('texts.email_documents_header').'<ul><li><a>'.trans('texts.email_documents_example_1').'</a></li><li><a>'.trans('texts.email_documents_example_2').'</a></li></ul>' !!}";
+            var documentsHtml = {!! json_encode(trans('texts.email_documents_header') . '<ul><li><a>' . trans('texts.email_documents_example_1') . '</a></li><li><a>' . trans('texts.email_documents_example_2') . '</a></li></ul>') !!};
         @else
             var documentsHtml = "";
         @endif
@@ -34,14 +42,14 @@
             'password': passwordHtml,
             'documents': documentsHtml,
             'viewLink': '{{ link_to('#', auth()->user()->account->getBaseUrl() . '/...') }}$password',
-            'viewButton': isQuote || (invoice && invoice.invoice_type_id == {{ INVOICE_TYPE_QUOTE }}) ?
-                '{!! Form::flatButton('view_quote', '#0b4d78') !!}$password' :
-                '{!! Form::flatButton('view_invoice', '#0b4d78') !!}$password',
+            'viewButton': viewButton,
             'paymentLink': '{{ link_to('#', auth()->user()->account->getBaseUrl() . '/...') }}$password',
-            'paymentButton': '{!! Form::flatButton('pay_now', '#36c157') !!}$password',
+            'paymentButton': {!! json_encode(Form::flatButton('pay_now', '#36c157')) !!} + '$password',
+            'approveLink': '{{ link_to('#', auth()->user()->account->getBaseUrl() . '/...') }}$password',
+            'approveButton': {!! json_encode(Form::flatButton('approve', '#36c157')) !!} + '$password',
             'autoBill': '{{ trans('texts.auto_bill_notification_placeholder') }}',
             'portalLink': "{{ auth()->user()->account->getBaseUrl() . '/...' }}",
-            'portalButton': '{!! Form::flatButton('view_portal', '#36c157') !!}',
+            'portalButton': {!! json_encode(Form::flatButton('view_portal', '#36c157')) !!},
             'customClient1': invoice ? invoice.client.custom_value1 : 'custom value',
             'customClient2': invoice ? invoice.client.custom_value2 : 'custom value',
             'customContact1': invoice ? invoice.client.contacts[0].custom_value1 : 'custom value',
@@ -90,11 +98,14 @@
             <div class="panel-body">
                 <div class="row">
                     <div class="col-md-6">
-                        <p>{{ trans('texts.company_variables') }}</p>
+                        <p>{{ trans('texts.client_variables') }}</p>
                         <ul>
                             @foreach([
-                                'account',
-                                'emailSignature',
+                                'client',
+                                'contact',
+                                'firstName',
+                                'password',
+                                'autoBill',
                             ] as $field)
                                 <li>${{ $field }}</li>
                             @endforeach
@@ -116,14 +127,11 @@
                         </ul>
                     </div>
                     <div class="col-md-6">
-                        <p>{{ trans('texts.client_variables') }}</p>
+                        <p>{{ trans('texts.company_variables') }}</p>
                         <ul>
                             @foreach([
-                                'client',
-                                'contact',
-                                'firstName',
-                                'password',
-                                'autoBill',
+                                'account',
+                                'emailSignature',
                             ] as $field)
                                 <li>${{ $field }}</li>
                             @endforeach
@@ -135,6 +143,8 @@
                                 'viewButton',
                                 'paymentLink',
                                 'paymentButton',
+                                'approveLink',
+                                'approveButton',
                                 'portalLink',
                                 'portalButton',
                             ] as $field)
@@ -149,30 +159,33 @@
                                 @endif
                             @endforeach
                         </ul>
-                        @if ($account->custom_client_label1 || $account->custom_contact_label1 || $account->custom_invoice_text_label1)
+                        @if ($account->customLabel('client1') || $account->customLabel('contact1') || $account->customLabel('invoice_text1'))
                             <p>{{ trans('texts.custom_variables') }}</p>
                             <ul>
-                                @if ($account->custom_client_label1)
+                                @if ($account->customLabel('client1'))
                                     <li>$customClient1</li>
                                 @endif
-                                @if ($account->custom_client_label2)
+                                @if ($account->customLabel('client2'))
                                     <li>$customClient2</li>
                                 @endif
-                                @if ($account->custom_contact_label1)
+                                @if ($account->customLabel('contact1'))
                                     <li>$customContact1</li>
                                 @endif
-                                @if ($account->custom_contact_label2)
+                                @if ($account->customLabel('contact2'))
                                     <li>$customContact2</li>
                                 @endif
-                                @if ($account->custom_invoice_text_label1)
+                                @if ($account->customLabel('invoice_text1'))
                                     <li>$customInvoice1</li>
                                 @endif
-                                @if ($account->custom_invoice_text_label2)
+                                @if ($account->customLabel('invoice_text2'))
                                     <li>$customInvoice2</li>
                                 @endif
                             </ul>
                         @endif
                     </div>
+                </div><br/>
+                <div class="text-muted">
+                    {{ trans('texts.amount_variable_help') }}
                 </div>
             </div>
             </div>

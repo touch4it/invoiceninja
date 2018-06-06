@@ -85,17 +85,18 @@ class AppServiceProvider extends ServiceProvider
                         ->render();
         });
 
-        Form::macro('emailPaymentButton', function ($link = '#') {
+        Form::macro('emailPaymentButton', function ($link = '#', $label = 'pay_now') {
             return view('partials.email_button')
                         ->with([
                             'link' => $link,
-                            'field' => 'pay_now',
+                            'field' => $label,
                             'color' => '#36c157',
                         ])
                         ->render();
         });
 
         Form::macro('breadcrumbs', function ($status = false) {
+
             $str = '<ol class="breadcrumb">';
 
             // Get the breadcrumbs by exploding the current path.
@@ -133,6 +134,9 @@ class AppServiceProvider extends ServiceProvider
                 if ($i == count($crumbs) - 1) {
                     $str .= "<li class='active'>$name</li>";
                 } else {
+                    if (count($crumbs) > 2 && $crumbs[1] == 'proposals' && $crumb != 'proposals') {
+                        $crumb = 'proposals/' . $crumb;
+                    }
                     $str .= '<li>'.link_to($crumb, $name).'</li>';
                 }
             }
@@ -204,8 +208,8 @@ class AppServiceProvider extends ServiceProvider
         Validator::extend('valid_invoice_items', function ($attribute, $value, $parameters) {
             $total = 0;
             foreach ($value as $item) {
-                $qty = ! empty($item['qty']) ? $item['qty'] : 1;
-                $cost = ! empty($item['cost']) ? $item['cost'] : 1;
+                $qty = ! empty($item['qty']) ? Utils::parseFloat($item['qty']) : 1;
+                $cost = ! empty($item['cost']) ? Utils::parseFloat($item['cost']) : 1;
                 $total += $qty * $cost;
             }
 

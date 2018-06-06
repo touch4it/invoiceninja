@@ -68,6 +68,19 @@ class InvoiceApiController extends BaseAPIController
             $invoices->whereInvoiceNumber($invoiceNumber);
         }
 
+        // Fllter by status
+        if ($statusId = Input::get('status_id')) {
+            $invoices->where('invoice_status_id', '>=', $statusId);
+        }
+
+        if (request()->has('is_recurring')) {
+            $invoices->where('is_recurring', '=', request()->is_recurring);
+        }
+
+        if (request()->has('invoice_type_id')) {
+            $invoices->where('invoice_type_id', '=', request()->invoice_type_id);
+        }
+
         return $this->listResponse($invoices);
     }
 
@@ -193,7 +206,7 @@ class InvoiceApiController extends BaseAPIController
                 $payment = $this->paymentRepo->save([
                     'invoice_id' => $invoice->id,
                     'client_id' => $client->id,
-                    'amount' => $data['paid'],
+                    'amount' => round($data['paid'], 2),
                 ]);
             }
         }
@@ -236,8 +249,6 @@ class InvoiceApiController extends BaseAPIController
             'po_number' => '',
             'invoice_design_id' => $account->invoice_design_id,
             'invoice_items' => [],
-            'custom_value1' => 0,
-            'custom_value2' => 0,
             'custom_taxes1' => false,
             'custom_taxes2' => false,
             'tax_name1' => '',
@@ -269,7 +280,7 @@ class InvoiceApiController extends BaseAPIController
         }
 
         // initialize the line items
-        if (isset($data['product_key']) || isset($data['cost']) || isset($data['notes']) || isset($data['qty'])) {
+        if (! isset($data['invoice_items']) && (isset($data['product_key']) || isset($data['cost']) || isset($data['notes']) || isset($data['qty']))) {
             $data['invoice_items'] = [self::prepareItem($data)];
             // make sure the tax isn't applied twice (for the invoice and the line item)
             unset($data['invoice_items'][0]['tax_name1']);
@@ -278,6 +289,16 @@ class InvoiceApiController extends BaseAPIController
             unset($data['invoice_items'][0]['tax_rate2']);
         } else {
             foreach ($data['invoice_items'] as $index => $item) {
+                // check for multiple products
+                if ($productKey = array_get($item, 'product_key')) {
+                    $parts = explode(',', $productKey);
+                    if (count($parts) > 1 && Product::findProductByKey($parts[0])) {
+                        foreach ($parts as $index => $productKey) {
+                            $data['invoice_items'][$index] = self::prepareItem(['product_key' => $productKey]);
+                        }
+                        break;
+                    }
+                }
                 $data['invoice_items'][$index] = self::prepareItem($item);
             }
         }
@@ -319,6 +340,13 @@ class InvoiceApiController extends BaseAPIController
         foreach ($fields as $key => $val) {
             if (! isset($item[$key])) {
                 $item[$key] = $val;
+            }
+        }
+
+        // Workaround to support line item taxes w/Zapier
+        foreach (['tax_rate1', 'tax_name1', 'tax_rate2', 'tax_name2'] as $field) {
+            if (! empty($item['item_' . $field])) {
+                $item[$field] = $item['item_' . $field];
             }
         }
 

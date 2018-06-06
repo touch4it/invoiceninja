@@ -92,7 +92,7 @@ class DashboardRepository
             $record->lineTension = 0;
             $record->borderWidth = 4;
             $record->borderColor = "rgba({$color}, 1)";
-            $record->backgroundColor = "rgba({$color}, 0.05)";
+            $record->backgroundColor = "rgba({$color}, 0.1)";
             $datasets[] = $record;
 
             if ($entityType == ENTITY_INVOICE) {
@@ -337,7 +337,8 @@ class DashboardRepository
                     ->where('invoices.is_public', '=', true)
                     ->where('contacts.is_primary', '=', true)
                     ->where(function($query) {
-                        $query->where(DB::raw("coalesce(invoices.partial_due_date, invoices.due_date)"), '>=', date('Y-m-d'));
+                        $query->where(DB::raw("coalesce(invoices.partial_due_date, invoices.due_date)"), '>=', date('Y-m-d'))
+                            ->orWhereNull('invoices.due_date');
                     })
                     ->orderBy('invoices.due_date', 'asc');
 

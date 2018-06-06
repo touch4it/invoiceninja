@@ -24,21 +24,24 @@
     <td>{{ trans('texts.currency') }}</td>
     <td>{{ trans('texts.public_notes') }}</td>
     <td>{{ trans('texts.private_notes') }}</td>
-    @if ($account->custom_client_label1)
-        <td>{{ $account->custom_client_label1 }}</td>
+    @if ($account->customLabel('client1'))
+        <td>{{ $account->present()->customLabel('client1') }}</td>
     @endif
-    @if ($account->custom_client_label2)
-        <td>{{ $account->custom_client_label2 }}</td>
+    @if ($account->customLabel('client2'))
+        <td>{{ $account->present()->customLabel('client2') }}</td>
+    @endif
+    @if ($account->hasReminders())
+        <td>{{ trans('texts.reminders') }}</td>
     @endif
     <td>{{ trans('texts.first_name') }}</td>
     <td>{{ trans('texts.last_name') }}</td>
     <td>{{ trans('texts.email') }}</td>
     <td>{{ trans('texts.phone') }}</td>
-    @if ($account->custom_contact_label1)
-        <td>{{ $account->custom_contact_label1 }}</td>
+    @if ($account->customLabel('contact1'))
+        <td>{{ $account->present()->customLabel('contact1') }}</td>
     @endif
-    @if ($account->custom_contact_label2)
-        <td>{{ $account->custom_contact_label2 }}</td>
+    @if ($account->customLabel('contact2'))
+        <td>{{ $account->present()->customLabel('contact2') }}</td>
     @endif
 </tr>
 
@@ -69,20 +72,23 @@
         <td>{{ $client->currency ? $client->currency->code : '' }}</td>
         <td>{{ $client->public_notes }}</td>
         <td>{{ $client->private_notes }}</td>
-        @if ($account->custom_client_label1)
+        @if ($account->customLabel('client1'))
             <td>{{ $client->custom_value1 }}</td>
         @endif
-        @if ($account->custom_client_label2)
+        @if ($account->customLabel('client2'))
             <td>{{ $client->custom_value2 }}</td>
+        @endif
+        @if ($account->hasReminders())
+            <td>{{ $client->send_reminders ? trans('texts.yes') : trans('texts.no') }}</td>
         @endif
         <td>{{ $client->contacts[0]->first_name }}</td>
         <td>{{ $client->contacts[0]->last_name }}</td>
         <td>{{ $client->contacts[0]->email }}</td>
         <td>{{ $client->contacts[0]->phone }}</td>
-        @if ($account->custom_contact_label1)
+        @if ($account->customLabel('contact1'))
             <td>{{ $client->contacts[0]->custom_value1 }}</td>
         @endif
-        @if ($account->custom_contact_label2)
+        @if ($account->customLabel('contact2'))
             <td>{{ $client->contacts[0]->custom_value2 }}</td>
         @endif
     </tr>

@@ -16,8 +16,9 @@
 
 	{!! Former::open($url)
         ->addClass('col-lg-10 col-lg-offset-1 warn-on-exit main-form')
-        ->onsubmit('onFormSubmit(event)')
+        ->onsubmit('return onFormSubmit(event)')
         ->method($method)
+        ->autocomplete('off')
         ->rules(array(
     		'client' => 'required',
     		'invoice' => 'required',
@@ -162,6 +163,9 @@
     }
 
 	$(function() {
+        @if (! empty($totalCredit))
+            $('#payment_type_id option:contains("{{ trans('texts.apply_credit') }}")').text("{{ trans('texts.apply_credit') }} | {{ $totalCredit}}");
+        @endif
 
         @if (Input::old('data'))
             // this means we failed so we'll reload the previous state
@@ -201,6 +205,12 @@
             toggleDatePicker('payment_date');
         });
 
+        $('#exchange_currency_id').on('change', function() {
+            setTimeout(function() {
+                model.updateExchangeRate();
+            }, 1);
+        })
+
         if (isStorageSupported()) {
             if (localStorage.getItem('last:send_email_receipt')) {
                 $('#email_receipt').prop('checked', true);
@@ -209,7 +219,26 @@
 	});
 
     function onFormSubmit(event) {
-        $('#saveButton').attr('disabled', true);
+        if ($('#saveButton').is(':disabled')) {
+            return false;
+        }
+
+        @if ($payment)
+            $('#saveButton').attr('disabled', true);
+            return true;
+        @else
+            // warn if amount is more than balance/credit will be created
+            var invoiceId = $('input[name=invoice]').val();
+            var invoice = invoiceMap[invoiceId];
+            var amount = $('#amount').val();
+
+            if (NINJA.parseFloat(amount) <= invoice.balance || confirm("{{ trans('texts.amount_greater_than_balance') }}")) {
+                $('#saveButton').attr('disabled', true);
+                return true;
+            } else {
+                return false;
+            }
+        @endif
     }
 
     function submitAction(action) {
@@ -262,12 +291,28 @@
             }
         }, self);
 
+
+        self.updateExchangeRate = function() {
+            var fromCode = self.paymentCurrencyCode();
+            var toCode = self.exchangeCurrencyCode();
+            if (currencyMap[fromCode].exchange_rate && currencyMap[toCode].exchange_rate) {
+                var rate = fx.convert(1, {
+                    from: fromCode,
+                    to: toCode,
+                });
+                self.exchange_rate(roundToFour(rate, true));
+            } else {
+                self.exchange_rate(1);
+            }
+        }
+
         self.getCurrency = function(currencyId) {
             return currencyMap[currencyId || self.account_currency_id()];
         };
 
         self.exchangeCurrencyCode = ko.computed(function() {
-            return self.getCurrency(self.exchange_currency_id()).code;
+            var currency = self.getCurrency(self.exchange_currency_id());
+            return currency ? currency.code : '';
         });
 
         self.paymentCurrencyCode = ko.computed(function() {
@@ -277,7 +322,8 @@
             } else {
                 var currencyId = self.account_currency_id();
             }
-            return self.getCurrency(currencyId).code;
+            var currency = self.getCurrency(currencyId);
+            return currency ? currency.code : '';
         });
 
         self.enableExchangeRate = ko.computed(function() {
@@ -333,9 +379,14 @@
                     formatMoneyInvoice(invoice.balance, invoice),  invoice.public_id));
         }
         $('select#invoice').combobox('refresh');
+        $('#amount').val('');
 
         if (window.model) {
+            model.amount('');
             model.client_id(clientId);
+            setTimeout(function() {
+                model.updateExchangeRate();
+            }, 1);
         }
       });
 
@@ -351,25 +402,31 @@
           var client = clientMap[invoice.client.public_id];
           invoice.client = client;
           setComboboxValue($('.client-select'), client.public_id, getClientDisplayName(client));
-          if (!parseFloat($('#amount').val())) {
-            var amount = parseFloat(invoice.balance);
-            $('#amount').val(amount.toFixed(2));
-            model.amount(amount);
-          }
-        }
+          var amount = parseFloat(invoice.balance);
+          $('#amount').val(amount.toFixed(2));
+          model.amount(amount);
+      } else {
+          $('#amount').val('');
+          model.amount('');
+      }
         model.client_id(client ? client.public_id : 0);
+        setTimeout(function() {
+            model.updateExchangeRate();
+        }, 1);
       });
 
       $invoiceSelect.combobox({highlighter: comboboxHighlighter});
 
       if (invoiceId) {
         var invoice = invoiceMap[invoiceId];
-        var client = clientMap[invoice.client.public_id];
-        invoice.client = client;
-        setComboboxValue($('.invoice-select'), invoice.public_id, (invoice.invoice_number + ' - ' +
-                invoice.invoice_status.name + ' - ' + getClientDisplayName(client) + ' - ' +
-                formatMoneyInvoice(invoice.amount, invoice) + ' | ' + formatMoneyInvoice(invoice.balance, invoice)));
-        $invoiceSelect.trigger('change');
+        if (invoice) {
+            var client = clientMap[invoice.client.public_id];
+            invoice.client = client;
+            setComboboxValue($('.invoice-select'), invoice.public_id, (invoice.invoice_number + ' - ' +
+                    invoice.invoice_status.name + ' - ' + getClientDisplayName(client) + ' - ' +
+                    formatMoneyInvoice(invoice.amount, invoice) + ' | ' + formatMoneyInvoice(invoice.balance, invoice)));
+            $invoiceSelect.trigger('change');
+        }
       } else if (clientId) {
         var client = clientMap[clientId];
         setComboboxValue($('.client-select'), client.public_id, getClientDisplayName(client));

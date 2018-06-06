@@ -25,6 +25,7 @@
     {!! Former::open($url)
             ->addClass('col-lg-10 col-lg-offset-1 warn-on-exit task-form')
             ->onsubmit('return onFormSubmit(event)')
+            ->autocomplete('off')
             ->method($method) !!}
 
     @if ($task)
@@ -63,6 +64,8 @@
                         ->addGroupClass('project-select')
                         ->label(trans('texts.project')) !!}
             @endif
+
+            @include('partials/custom_fields', ['entityType' => ENTITY_TASK])
 
             {!! Former::textarea('description')->rows(4) !!}
 
@@ -297,7 +300,7 @@
     }
 
     function onDeleteClick() {
-        if (confirm('{!! trans("texts.are_you_sure") !!}')) {
+        if (confirm({!! json_encode(trans("texts.are_you_sure")) !!})) {
             submitAction('delete');
         }
     }
@@ -638,8 +641,10 @@
 
         if (projectId) {
            var project = projectMap[projectId];
-           setComboboxValue($('.project-select'), project.public_id, project.name);
-           $projectSelect.trigger('change');
+           if (project) {
+               setComboboxValue($('.project-select'), project.public_id, project.name);
+               $projectSelect.trigger('change');
+           }
         } else {
            $clientSelect.trigger('change');
         }

@@ -40,6 +40,7 @@ class InvoiceItem extends EntityModel
         'tax_name2',
         'tax_rate2',
         'invoice_item_type_id',
+        'discount',
     ];
 
     /**
@@ -74,20 +75,40 @@ class InvoiceItem extends EntityModel
         return $this->belongsTo('App\Models\Account');
     }
 
-    public function amount()
+    public function getPreTaxAmount()
     {
         $amount = $this->cost * $this->qty;
-        $preTaxAmount = $amount;
 
-        if ($this->tax_rate1) {
-            $amount += $preTaxAmount * $this->tax_rate1 / 100;
-        }
-
-        if ($this->tax_rate2) {
-            $amount += $preTaxAmount * $this->tax_rate2 / 100;
+        if ($this->discount != 0) {
+            if ($this->invoice->is_amount_discount) {
+                $amount -= $this->discount;
+            } else {
+                $amount -= round($amount * $this->discount / 100, 4);
+            }
         }
 
         return $amount;
+    }
+
+    public function getTaxAmount()
+    {
+        $tax = 0;
+        $preTaxAmount = $this->getPreTaxAmount();
+
+        if ($this->tax_rate1) {
+            $tax += round($preTaxAmount * $this->tax_rate1 / 100, 2);
+        }
+
+        if ($this->tax_rate2) {
+            $tax += round($preTaxAmount * $this->tax_rate2 / 100, 2);
+        }
+
+        return $tax;
+    }
+
+    public function amount()
+    {
+        return $this->getPreTaxAmount() + $this->getTaxAmount();
     }
 
     public function markFeePaid()
@@ -97,4 +118,33 @@ class InvoiceItem extends EntityModel
             $this->save();
         }
     }
+
+    public function hasTaxes()
+    {
+        if ($this->tax_name1 || $this->tax_rate1) {
+            return true;
+        }
+
+        if ($this->tax_name2 || $this->tax_rate2) {
+            return false;
+        }
+
+        return false;
+    }
+
+    public function costWithDiscount()
+    {
+        $cost = $this->cost;
+
+        if ($this->discount != 0) {
+            if ($this->invoice->is_amount_discount) {
+                $cost -= $discount / $this->qty;
+            } else {
+                $cost -= $cost * $discount / 100;
+            }
+        }
+
+        return $cost;
+    }
+
 }

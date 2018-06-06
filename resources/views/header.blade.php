@@ -2,6 +2,18 @@
 
 @section('head_css')
     <link href="{{ asset('css/built.css') }}?no_cache={{ NINJA_VERSION }}" rel="stylesheet" type="text/css"/>
+
+    @if (Utils::isNinjaDev())
+        <style type="text/css">
+            .nav-footer {
+                @if (config('mail.driver') == 'log' && ! config('services.postmark'))
+                    background-color: #50C878 !important;
+                @else
+                    background-color: #FD6A02 !important;
+                @endif
+            }
+        </style>
+    @endif
 @stop
 
 @section('head')
@@ -61,25 +73,25 @@
             hint: true,
             highlight: true,
           }
-          @if (Auth::check() && Auth::user()->account->custom_client_label1)
+          @if (Auth::check() && Auth::user()->account->customLabel('client1'))
           ,{
             name: 'data',
             limit: 3,
             display: 'value',
-            source: searchData(data['{{ Auth::user()->account->custom_client_label1 }}'], 'tokens'),
+            source: searchData(data['{{ Auth::user()->account->present()->customLabel('client1') }}'], 'tokens'),
             templates: {
-              header: '&nbsp;<span style="font-weight:600;font-size:16px">{{ Auth::user()->account->custom_client_label1 }}</span>'
+              header: '&nbsp;<span style="font-weight:600;font-size:16px">{{ Auth::user()->account->present()->customLabel('client1') }}</span>'
             }
           }
           @endif
-          @if (Auth::check() && Auth::user()->account->custom_client_label2)
+          @if (Auth::check() && Auth::user()->account->customLabel('client2'))
           ,{
             name: 'data',
             limit: 3,
             display: 'value',
-            source: searchData(data['{{ Auth::user()->account->custom_client_label2 }}'], 'tokens'),
+            source: searchData(data['{{ Auth::user()->account->present()->customLabel('client2') }}'], 'tokens'),
             templates: {
-              header: '&nbsp;<span style="font-weight:600;font-size:16px">{{ Auth::user()->account->custom_client_label2 }}</span>'
+              header: '&nbsp;<span style="font-weight:600;font-size:16px">{{ Auth::user()->account->present()->customLabel('client2') }}</span>'
             }
           }
           @endif
@@ -249,7 +261,9 @@
 
         @if (Auth::check())
           @if (!Auth::user()->registered)
-            {!! Button::success(trans('texts.sign_up'))->withAttributes(array('id' => 'signUpButton', 'data-toggle'=>'modal', 'data-target'=>'#signUpModal', 'style' => 'max-width:100px;;overflow:hidden'))->small() !!} &nbsp;
+              @if (!Auth::user()->confirmed)
+                {!! Button::success(trans('texts.sign_up'))->withAttributes(array('id' => 'signUpButton', 'onclick' => 'showSignUp()', 'style' => 'max-width:100px;;overflow:hidden'))->small() !!} &nbsp;
+              @endif
           @elseif (Utils::isNinjaProd() && (!Auth::user()->isPro() || Auth::user()->isTrial()))
             @if (Auth::user()->account->company->hasActivePromo())
                 {!! Button::warning(trans('texts.plan_upgrade'))->withAttributes(array('onclick' => 'showUpgradeModal()', 'style' => 'max-width:100px;overflow:hidden'))->small() !!} &nbsp;
@@ -348,6 +362,7 @@
             'recurring_invoices' => 'recurring',
             'credits' => false,
             'quotes' => false,
+            'proposals' => false,
             'projects' => false,
             'tasks' => false,
             'expenses' => false,
@@ -362,7 +377,7 @@
 
 </nav>
 
-<div id="wrapper" class='{!! session(SESSION_LEFT_SIDEBAR) ? 'toggled-left' : '' !!} {!! session(SESSION_RIGHT_SIDEBAR, true) ? 'toggled-right' : '' !!}'>
+<div id="wrapper" class='{{ session(SESSION_LEFT_SIDEBAR) ? 'toggled-left' : '' }} {{ session(SESSION_RIGHT_SIDEBAR, true) ? 'toggled-right' : '' }}'>
 
     <!-- Sidebar -->
     <div id="left-sidebar-wrapper" class="hide-phone">
@@ -376,6 +391,7 @@
                 'recurring_invoices',
                 'credits',
                 'quotes',
+                'proposals',
                 'projects',
                 'tasks',
                 'expenses',
@@ -389,7 +405,7 @@
             @endif
             @endforeach
             @if ( ! Utils::isNinjaProd())
-                @foreach (Module::all() as $module)
+                @foreach (Module::collections() as $module)
                     @include('partials.navigation_option', [
                         'option' => $module->getAlias(),
                         'icon' => $module->get('icon', 'th-large'),
@@ -466,7 +482,7 @@
           </div>
 
           @if (!isset($showBreadcrumbs) || $showBreadcrumbs)
-            {!! Form::breadcrumbs((isset($entity) && $entity->exists) ? $entity->present()->statusLabel : false) !!}
+            {!! Form::breadcrumbs((! empty($entity) && $entity->exists) ? $entity->present()->statusLabel : false) !!}
           @endif
 
           @yield('content')
@@ -497,6 +513,10 @@
 @include('partials.contact_us')
 @include('partials.sign_up')
 @include('partials.keyboard_shortcuts')
+
+@if (auth()->check() && ! auth()->user()->hasAcceptedLatestTerms())
+    @include('partials.accept_terms')
+@endif
 
 </div>
 

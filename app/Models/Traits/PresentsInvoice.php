@@ -2,6 +2,8 @@
 
 namespace App\Models\Traits;
 
+use Utils;
+
 /**
  * Class PresentsInvoice.
  */
@@ -99,22 +101,22 @@ trait PresentsInvoice
             ]
         ];
 
-        if ($this->custom_invoice_text_label1) {
+        if ($this->customLabel('invoice_text1')) {
             $fields[INVOICE_FIELDS_INVOICE][] = 'invoice.custom_text_value1';
         }
-        if ($this->custom_invoice_text_label2) {
+        if ($this->customLabel('invoice_text2')) {
             $fields[INVOICE_FIELDS_INVOICE][] = 'invoice.custom_text_value2';
         }
-        if ($this->custom_client_label1) {
+        if ($this->customLabel('client1')) {
             $fields[INVOICE_FIELDS_CLIENT][] = 'client.custom_value1';
         }
-        if ($this->custom_client_label2) {
+        if ($this->customLabel('client2')) {
             $fields[INVOICE_FIELDS_CLIENT][] = 'client.custom_value2';
         }
-        if ($this->custom_contact_label1) {
+        if ($this->customLabel('contact1')) {
             $fields[INVOICE_FIELDS_CLIENT][] = 'contact.custom_value1';
         }
-        if ($this->custom_contact_label2) {
+        if ($this->customLabel('contact2')) {
             $fields[INVOICE_FIELDS_CLIENT][] = 'contact.custom_value2';
         }
         if ($this->custom_label1) {
@@ -186,6 +188,7 @@ trait PresentsInvoice
                 'product.custom_value2',
                 'product.unit_cost',
                 'product.quantity',
+                'product.discount',
                 'product.tax',
                 'product.line_total',
             ],
@@ -196,6 +199,7 @@ trait PresentsInvoice
                 'product.custom_value2',
                 'product.rate',
                 'product.hours',
+                'product.discount',
                 'product.tax',
                 'product.line_total',
             ],
@@ -332,6 +336,7 @@ trait PresentsInvoice
             'custom_value1',
             'custom_value2',
             'delivery_note',
+            'date',
         ];
 
         foreach ($fields as $field) {
@@ -349,18 +354,18 @@ trait PresentsInvoice
         }
 
         foreach ([
-            'account.custom_value1' => 'custom_label1',
-            'account.custom_value2' => 'custom_label2',
-            'invoice.custom_text_value1' => 'custom_invoice_text_label1',
-            'invoice.custom_text_value2' => 'custom_invoice_text_label2',
-            'client.custom_value1' => 'custom_client_label1',
-            'client.custom_value2' => 'custom_client_label2',
-            'contact.custom_value1' => 'custom_contact_label1',
-            'contact.custom_value2' => 'custom_contact_label2',
-            'product.custom_value1' => 'custom_invoice_item_label1',
-            'product.custom_value2' => 'custom_invoice_item_label2',
+            'account.custom_value1' => 'account1',
+            'account.custom_value2' => 'account2',
+            'invoice.custom_text_value1' => 'invoice_text1',
+            'invoice.custom_text_value2' => 'invoice_text2',
+            'client.custom_value1' => 'client1',
+            'client.custom_value2' => 'client2',
+            'contact.custom_value1' => 'contact1',
+            'contact.custom_value2' => 'contact2',
+            'product.custom_value1' => 'product1',
+            'product.custom_value2' => 'product2',
         ] as $field => $property) {
-            $data[$field] = e($this->$property) ?: trans('texts.custom_field');
+            $data[$field] = e($this->present()->customLabel($property)) ?: trans('texts.custom_field');
         }
 
         return $data;
@@ -378,9 +383,9 @@ trait PresentsInvoice
         return null;
     }
 
-    public function hideQuantity() {
+    public function hasInvoiceField($type, $field) {
         $fields = $this->getInvoiceFields();
 
-        return ! isset($fields['product_fields']['product.quantity']);
+        return isset($fields[$type . '_fields'][$field]);
     }
 }

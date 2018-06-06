@@ -137,9 +137,11 @@ class PaymentService extends BaseService
         try {
             return $paymentDriver->completeOnsitePurchase(false, $paymentMethod);
         } catch (Exception $exception) {
+            $subject = trans('texts.auto_bill_failed', ['invoice_number' => $invoice->invoice_number]);
+            $message = sprintf('%s: %s', ucwords($paymentDriver->providerName()), $exception->getMessage());
+            //$message .= $exception->getTraceAsString();
+            Utils::logError($message, 'PHP', true);
             if (! Auth::check()) {
-                $subject = trans('texts.auto_bill_failed', ['invoice_number' => $invoice->invoice_number]);
-                $message = sprintf('%s: %s', ucwords($paymentDriver->providerName()), $exception->getMessage());
                 $mailer = app('App\Ninja\Mailers\UserMailer');
                 $mailer->sendMessage($invoice->user, $subject, $message, [
                     'invoice' => $invoice
@@ -153,7 +155,7 @@ class PaymentService extends BaseService
     public function save($input, $payment = null, $invoice = null)
     {
         // if the payment amount is more than the balance create a credit
-        if ($invoice && $input['amount'] > $invoice->balance) {
+        if ($invoice && Utils::parseFloat($input['amount']) > $invoice->balance) {
             $credit = Credit::createNew();
             $credit->client_id = $invoice->client_id;
             $credit->credit_date = date_create()->format('Y-m-d');

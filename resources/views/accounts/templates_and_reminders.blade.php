@@ -48,11 +48,13 @@
                     <ul class="nav nav-tabs" role="tablist" style="border: none">
                         <li role="presentation" class="active"><a href="#invoice" aria-controls="notes" role="tab" data-toggle="tab">{{ trans('texts.invoice_email') }}</a></li>
                         <li role="presentation"><a href="#quote" aria-controls="terms" role="tab" data-toggle="tab">{{ trans('texts.quote_email') }}</a></li>
+                        <li role="presentation"><a href="#proposal" aria-controls="terms" role="tab" data-toggle="tab">{{ trans('texts.proposal_email') }}</a></li>
                         <li role="presentation"><a href="#payment" aria-controls="footer" role="tab" data-toggle="tab">{{ trans('texts.payment_email') }}</a></li>
                     </ul>
                     <div class="tab-content">
                         @include('accounts.template', ['field' => 'invoice', 'active' => true])
                         @include('accounts.template', ['field' => 'quote'])
+                        @include('accounts.template', ['field' => 'proposal'])
                         @include('accounts.template', ['field' => 'payment'])
                     </div>
                 </div>
@@ -73,11 +75,13 @@
                         <li role="presentation" class="active"><a href="#reminder1" aria-controls="notes" role="tab" data-toggle="tab">{{ trans('texts.first_reminder') }}</a></li>
                         <li role="presentation"><a href="#reminder2" aria-controls="terms" role="tab" data-toggle="tab">{{ trans('texts.second_reminder') }}</a></li>
                         <li role="presentation"><a href="#reminder3" aria-controls="footer" role="tab" data-toggle="tab">{{ trans('texts.third_reminder') }}</a></li>
+                        <li role="presentation"><a href="#reminder4" aria-controls="footer" role="tab" data-toggle="tab">{{ trans('texts.endless_reminder') }}</a></li>
                     </ul>
                     <div class="tab-content">
                         @include('accounts.template', ['field' => 'reminder1', 'number' => 1, 'isReminder' => true, 'active' => true])
                         @include('accounts.template', ['field' => 'reminder2', 'number' => 2, 'isReminder' => true])
                         @include('accounts.template', ['field' => 'reminder3', 'number' => 3, 'isReminder' => true])
+                        @include('accounts.template', ['field' => 'reminder4', 'number' => 4, 'isReminder' => true])
                     </div>
                 </div>
             </div>
@@ -161,8 +165,7 @@
                     var idName = '#email_' + stringType + '_' + entityType;
                     var value = $(idName).val();
                     var previewName = '#' + entityType + '_' + stringType + '_preview';
-                    var isQuote = entityType == "{{ ENTITY_QUOTE }}";
-                    $(previewName).html(renderEmailTemplate(value, false, isQuote));
+                    $(previewName).html(renderEmailTemplate(value, false, entityType));
                 }
             }
         }

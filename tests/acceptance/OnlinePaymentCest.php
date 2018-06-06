@@ -37,7 +37,7 @@ class OnlinePaymentCest
         $I->amOnPage('/invoices/create');
         $invoiceNumber = $I->grabAttributeFrom('#invoice_number', 'value');
         $I->selectDropdown($I, $clientEmail, '.client_select .dropdown-toggle');
-        $I->fillField('table.invoice-table tbody tr:nth-child(1) #product_key', $productKey);
+        $I->fillField('table.invoice-table tbody tr:nth-child(1) td:nth-child(2) input.tt-input', $productKey);
         $I->click('table.invoice-table tbody tr:nth-child(1) .tt-selectable');
         $I->click('Mark Sent');
         $I->see($clientEmail);
@@ -52,11 +52,11 @@ class OnlinePaymentCest
         // create recurring invoice and auto-bill
         $I->amOnPage('/recurring_invoices/create');
         $I->selectDropdown($I, $clientEmail, '.client_select .dropdown-toggle');
-        $I->fillField('table.invoice-table tbody tr:nth-child(1) #product_key', $productKey);
+        $I->fillField('table.invoice-table tbody tr:nth-child(1) td:nth-child(2) input.tt-input', $productKey);
         $I->click('table.invoice-table tbody tr:nth-child(1) .tt-selectable');
         $I->selectOption('#auto_bill', 3);
         $I->executeJS('onConfirmEmailClick()');
-        $I->wait(4);
+        $I->wait(10);
 
         $invoiceId = $I->grabFromDatabase('invoices', 'id', ['client_id' => $clientId, 'is_recurring' => true]);
         $invoiceId = $I->grabFromDatabase('invoices', 'public_id', ['recurring_invoice_id' => $invoiceId]);

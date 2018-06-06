@@ -36,7 +36,12 @@ class AccountApiController extends BaseAPIController
     {
         $headers = Utils::getApiHeaders();
 
-        return Response::make(RESULT_SUCCESS, 200, $headers);
+        // Legacy support for Zapier
+        if (request()->v2) {
+            return $this->response(auth()->user()->email);
+        } else {
+            return Response::make(RESULT_SUCCESS, 200, $headers);
+        }
     }
 
     public function register(RegisterRequest $request)
@@ -92,7 +97,7 @@ class AccountApiController extends BaseAPIController
 
         return $this->response($data);
     }
-    
+
     public function show(Request $request)
     {
         $account = Auth::user()->account;
@@ -184,12 +189,10 @@ class AccountApiController extends BaseAPIController
 
         $devices = json_decode($account->devices, true);
 
-        foreach($devices as $key => $value)
+        for($x=0; $x<count($devices); $x++)
         {
-
-            if($request->token == $value['token'])
-                unset($devices[$key]);
-
+            if($request->token == $devices[$x]['token'])
+                unset($devices[$x]);
         }
 
         $account->devices = json_encode(array_values($devices));
@@ -251,7 +254,7 @@ class AccountApiController extends BaseAPIController
     public function iosSubscriptionStatus() {
 
         //stubbed for iOS callbacks
-        
+
     }
 
 }

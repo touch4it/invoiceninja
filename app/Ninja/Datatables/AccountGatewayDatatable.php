@@ -22,17 +22,19 @@ class AccountGatewayDatatable extends EntityDatatable
             [
                 'gateway',
                 function ($model) {
+                    $accountGateway = $this->getAccountGateway($model->id);
                     if ($model->deleted_at) {
                         return $model->name;
-                    } elseif ($model->gateway_id == GATEWAY_CUSTOM) {
-                        $accountGateway = $this->getAccountGateway($model->id);
+                    } elseif (in_array($model->gateway_id, [GATEWAY_CUSTOM1, GATEWAY_CUSTOM2, GATEWAY_CUSTOM3])) {
                         $name = $accountGateway->getConfigField('name') . ' [' . trans('texts.custom') . ']';
-
                         return link_to("gateways/{$model->public_id}/edit", $name)->toHtml();
                     } elseif ($model->gateway_id != GATEWAY_WEPAY) {
-                        return link_to("gateways/{$model->public_id}/edit", $model->name)->toHtml();
+                        $name = $model->name;
+                        if ($accountGateway->isTestMode()) {
+                            $name .= sprintf(' [%s]', trans('texts.test'));
+                        }
+                        return link_to("gateways/{$model->public_id}/edit", $name)->toHtml();
                     } else {
-                        $accountGateway = $this->getAccountGateway($model->id);
                         $config = $accountGateway->getConfig();
                         $endpoint = WEPAY_ENVIRONMENT == WEPAY_STAGE ? 'https://stage.wepay.com/' : 'https://www.wepay.com/';
                         $wepayAccountId = $config->accountId;
@@ -189,8 +191,12 @@ class AccountGatewayDatatable extends EntityDatatable
                 },
                 function ($model) use ($gatewayType) {
                     // Only show this action if the given gateway supports this gateway type
-                    if ($model->gateway_id == GATEWAY_CUSTOM) {
-                        return $gatewayType->id == GATEWAY_TYPE_CUSTOM;
+                    if ($model->gateway_id == GATEWAY_CUSTOM1) {
+                        return $gatewayType->id == GATEWAY_TYPE_CUSTOM1;
+                    } elseif ($model->gateway_id == GATEWAY_CUSTOM2) {
+                        return $gatewayType->id == GATEWAY_TYPE_CUSTOM2;
+                    } elseif ($model->gateway_id == GATEWAY_CUSTOM3) {
+                        return $gatewayType->id == GATEWAY_TYPE_CUSTOM3;
                     } else {
                         $accountGateway = $this->getAccountGateway($model->id);
                         return $accountGateway->paymentDriver()->supportsGatewayType($gatewayType->id);
@@ -227,8 +233,12 @@ class AccountGatewayDatatable extends EntityDatatable
 
     private function getGatewayTypes($id, $gatewayId)
     {
-        if ($gatewayId == GATEWAY_CUSTOM) {
-            $gatewayTypes = [GATEWAY_TYPE_CUSTOM];
+        if ($gatewayId == GATEWAY_CUSTOM1) {
+            $gatewayTypes = [GATEWAY_TYPE_CUSTOM1];
+        } elseif ($gatewayId == GATEWAY_CUSTOM2) {
+            $gatewayTypes = [GATEWAY_TYPE_CUSTOM2];
+        } elseif ($gatewayId == GATEWAY_CUSTOM3) {
+            $gatewayTypes = [GATEWAY_TYPE_CUSTOM3];
         } else {
             $accountGateway = $this->getAccountGateway($id);
             $paymentDriver = $accountGateway->paymentDriver();

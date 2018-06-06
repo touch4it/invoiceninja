@@ -17,6 +17,7 @@
 	{!! Former::open($url)
             ->addClass('warn-on-exit main-form')
             ->onsubmit('return onFormSubmit(event)')
+            ->autocomplete('off')
             ->method($method) !!}
     <div style="display:none">
         {!! Former::text('action') !!}
@@ -78,6 +79,8 @@
                                 ->addGroupClass('client-select') !!}
                     @endif
 
+                    @include('partials/custom_fields', ['entityType' => ENTITY_EXPENSE])
+
                     @if (count($taxRates))
                         @if (!$expense || ($expense && (!$expense->tax_name1 && !$expense->tax_name2)))
                             {!! Former::checkbox('apply_taxes')
@@ -111,12 +114,14 @@
                                 ->data_bind("datePicker: start_date, valueUpdate: 'afterkeydown'")
     							->data_date_format(Session::get(SESSION_DATE_PICKER_FORMAT, DEFAULT_DATE_PICKER_FORMAT))
                                 ->appendIcon('calendar')
-                                ->addGroupClass('start_date') !!}
+                                ->addGroupClass('start_date')
+                                ->data_date_start_date($expense ? false : $account->formatDate($account->getDateTime())) !!}
                         {!! Former::text('end_date')
                                 ->data_bind("datePicker: end_date, valueUpdate: 'afterkeydown'")
     							->data_date_format(Session::get(SESSION_DATE_PICKER_FORMAT, DEFAULT_DATE_PICKER_FORMAT))
                                 ->appendIcon('calendar')
-                                ->addGroupClass('end_date') !!}
+                                ->addGroupClass('end_date')
+                                ->data_date_start_date($expense ? false : $account->formatDate($account->getDateTime())) !!}
 
                     @else
                         @if ((! $expense || ! $expense->transaction_id))
@@ -271,7 +276,7 @@
 
         function onFormSubmit(event) {
             if (window.countUploadingDocuments > 0) {
-                swal("{!! trans('texts.wait_for_upload') !!}");
+                swal({!! json_encode(trans('texts.wait_for_upload')) !!});
                 return false;
             }
 
@@ -287,6 +292,7 @@
             var client = clientMap[clientId];
             if (client) {
                 model.invoice_currency_id(client.currency_id);
+                model.updateExchangeRate();
             }
         }
 
@@ -353,6 +359,12 @@
             $clientSelect.combobox({highlighter: comboboxHighlighter}).change(function() {
                 onClientChange();
             });
+
+            $('#invoice_currency_id, #expense_currency_id').on('change', function() {
+                setTimeout(function() {
+                    model.updateExchangeRate();
+                }, 1);
+            })
 
             @if ($data)
                 // this means we failed so we'll reload the previous state
@@ -473,11 +485,24 @@
                 write: function(value) {
                     // When changing the converted amount we're updating
                     // the exchange rate rather than change the amount
-                    self.exchange_rate(NINJA.parseFloat(value) / self.amount());
+                    self.exchange_rate(roundSignificant(NINJA.parseFloat(value) / self.amount()));
                     //self.amount(roundToTwo(value / self.exchange_rate()));
                 }
             }, self);
 
+            self.updateExchangeRate = function() {
+                var fromCode = self.expenseCurrencyCode();
+                var toCode = self.invoiceCurrencyCode();
+                if (currencyMap[fromCode].exchange_rate && currencyMap[toCode].exchange_rate) {
+                    var rate = fx.convert(1, {
+                        from: fromCode,
+                        to: toCode,
+                    });
+                    self.exchange_rate(roundToFour(rate, true));
+                } else {
+                    self.exchange_rate(1);
+                }
+            }
 
             self.getCurrency = function(currencyId) {
                 return currencyMap[currencyId || self.account_currency_id()];

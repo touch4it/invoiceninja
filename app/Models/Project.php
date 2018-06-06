@@ -25,12 +25,17 @@ class Project extends EntityModel
     protected $fillable = [
         'name',
         'task_rate',
+        'private_notes',
+        'due_date',
+        'budgeted_hours',
+        'custom_value1',
+        'custom_value2',
     ];
 
     /**
      * @var string
      */
-    protected $presenter = 'App\Ninja\Presenters\EntityPresenter';
+    protected $presenter = 'App\Ninja\Presenters\ProjectPresenter';
 
     /**
      * @return mixed
@@ -45,7 +50,15 @@ class Project extends EntityModel
      */
     public function getRoute()
     {
-        return "/projects/{$this->public_id}/edit";
+        return "/projects/{$this->public_id}";
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function account()
+    {
+        return $this->belongsTo('App\Models\Account');
     }
 
     /**
@@ -62,6 +75,18 @@ class Project extends EntityModel
     public function tasks()
     {
         return $this->hasMany('App\Models\Task');
+    }
+
+    public function scopeDateRange($query, $startDate, $endDate)
+    {
+        return $query->where(function ($query) use ($startDate, $endDate) {
+            $query->whereBetween('due_date', [$startDate, $endDate]);
+        });
+    }
+
+    public function getDisplayName()
+    {
+        return $this->name;
     }
 }
 

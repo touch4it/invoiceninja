@@ -35,6 +35,9 @@ use Session;
 use stdClass;
 use Utils;
 use Carbon;
+use League\Csv\Reader;
+use League\Csv\Statement;
+
 
 /**
  * Class ImportService.
@@ -97,6 +100,7 @@ class ImportService
         ENTITY_PAYMENT,
         ENTITY_TASK,
         ENTITY_PRODUCT,
+        ENTITY_VENDOR,
         ENTITY_EXPENSE,
         ENTITY_CUSTOMER,
     ];
@@ -112,6 +116,7 @@ class ImportService
         IMPORT_INVOICEABLE,
         IMPORT_INVOICEPLANE,
         IMPORT_NUTCACHE,
+        IMPORT_PANCAKE,
         IMPORT_RONIN,
         IMPORT_STRIPE,
         IMPORT_WAVE,
@@ -393,12 +398,14 @@ class ImportService
             }
         }
 
+        /*
         // if the invoice number is blank we'll assign it
         if ($entityType == ENTITY_INVOICE && ! $data['invoice_number']) {
             $account = Auth::user()->account;
             $invoice = Invoice::createNew();
             $data['invoice_number'] = $account->getNextNumber($invoice);
         }
+        */
 
         if (EntityModel::validate($data, $entityType) !== true) {
             return false;
@@ -649,8 +656,15 @@ class ImportService
     private function getCsvData($fileName)
     {
         $this->checkForFile($fileName);
-        $file = file_get_contents($fileName);
-        $data = array_map("str_getcsv", preg_split('/\r*\n+|\r+/', $file));
+
+        if (! ini_get('auto_detect_line_endings')) {
+            ini_set('auto_detect_line_endings', '1');
+        }
+
+        $csv = Reader::createFromPath($fileName, 'r');
+        //$csv->setHeaderOffset(0); //set the CSV header offset
+        $stmt = new Statement();
+        $data = iterator_to_array($stmt->process($csv));
 
         if (count($data) > 0) {
             $headers = $data[0];
@@ -947,7 +961,7 @@ class ImportService
             $this->maps['client'][$name] = $client->id;
             $this->maps['client_ids'][$client->public_id] = $client->id;
         }
-        if (count($client->contacts) && $name = strtolower(trim($client->contacts[0]->email))) {
+        if ($client->contacts->count() && $name = strtolower(trim($client->contacts[0]->email))) {
             $this->maps['client'][$name] = $client->id;
             $this->maps['client_ids'][$client->public_id] = $client->id;
         }
