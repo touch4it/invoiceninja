@@ -89,6 +89,10 @@ class ReportController extends BaseController
             'quote',
         ];
 
+        if (Auth::user()->hasPermission('manage_own_tasks') && ! Auth::user()->is_admin) {
+            $reportTypes = [ 'task' ];
+        }
+
         $params = [
             'startDate' => $startDate->format('Y-m-d'),
             'endDate' => $endDate->format('Y-m-d'),
