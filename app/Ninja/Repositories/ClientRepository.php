@@ -32,6 +32,7 @@ class ClientRepository extends BaseRepository
         $query = DB::table('clients')
                     ->join('accounts', 'accounts.id', '=', 'clients.account_id')
                     ->join('contacts', 'contacts.client_id', '=', 'clients.id')
+                    // commented in order to show all clients in task
                     //->where('clients.account_id', '=', \Auth::user()->account_id)
                     ->where('contacts.is_primary', '=', true)
                     ->where('contacts.deleted_at', '=', null)
