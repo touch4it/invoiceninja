@@ -5,6 +5,7 @@ namespace App\Ninja\Repositories;
 use App\Models\Document;
 use App\Models\Expense;
 use App\Models\Vendor;
+use App\Models\Client;
 use Auth;
 use DB;
 use Utils;
@@ -42,6 +43,15 @@ class ExpenseRepository extends BaseRepository
         return $query;
     }
 
+    public function findClient($clientPublicId)
+    {
+        $clientId = Client::getPrivateId($clientPublicId);
+
+        $query = $this->find()->where('expenses.client_id', '=', $clientId);
+
+        return $query;
+    }
+
     public function find($filter = null)
     {
         $accountid = \Auth::user()->account_id;
@@ -54,8 +64,8 @@ class ExpenseRepository extends BaseRepository
                     ->leftJoin('expense_categories', 'expenses.expense_category_id', '=', 'expense_categories.id')
                     ->where('expenses.account_id', '=', $accountid)
                     ->where('contacts.deleted_at', '=', null)
-                    ->where('vendors.deleted_at', '=', null)
-                    ->where('clients.deleted_at', '=', null)
+                    //->where('vendors.deleted_at', '=', null)
+                    //->where('clients.deleted_at', '=', null)
                     ->where(function ($query) { // handle when client isn't set
                         $query->where('contacts.is_primary', '=', true)
                               ->orWhere('contacts.is_primary', '=', null);

@@ -3,6 +3,7 @@
 namespace App\Ninja\Datatables;
 
 use App\Models\Task;
+use App\Models\TaskStatus;
 use Auth;
 use URL;
 use Utils;
@@ -33,7 +34,7 @@ class TaskDatatable extends EntityDatatable
                         return $model->project;
                     }
 
-                    return $model->project_public_id ? link_to("projects/{$model->project_public_id}/edit", $model->project)->toHtml() : '';
+                    return $model->project_public_id ? link_to("projects/{$model->project_public_id}", $model->project)->toHtml() : '';
                 },
             ],
             [
@@ -49,13 +50,17 @@ class TaskDatatable extends EntityDatatable
             [
                 'duration',
                 function ($model) {
-                    return Utils::formatTime(Task::calcDuration($model));
+                    if (! Auth::user()->can('viewByOwner', [ENTITY_EXPENSE, $model->user_id])) {
+                        return Utils::formatTime(Task::calcDuration($model));
+                    }
+
+                    return link_to("tasks/{$model->public_id}/edit", Utils::formatTime(Task::calcDuration($model)))->toHtml();
                 },
             ],
             [
                 'description',
                 function ($model) {
-                    return e($model->description);
+                    return $this->showWithTooltip($model->description);
                 },
             ],
             [
@@ -120,9 +125,31 @@ class TaskDatatable extends EntityDatatable
 
     private function getStatusLabel($model)
     {
-        $label = Task::calcStatusLabel($model->is_running, $model->balance, $model->invoice_number);
+        $label = Task::calcStatusLabel($model->is_running, $model->balance, $model->invoice_number, $model->task_status);
         $class = Task::calcStatusClass($model->is_running, $model->balance, $model->invoice_number);
 
         return "<h4><div class=\"label label-{$class}\">$label</div></h4>";
+    }
+
+    public function bulkActions()
+    {
+        $actions = [];
+
+        $statuses = TaskStatus::scope()->orderBy('sort_order')->get();
+
+        foreach ($statuses as $status) {
+            $actions[] = [
+                'label' => sprintf('%s %s', trans('texts.mark'), $status->name),
+                'url' => 'javascript:submitForm_' . $this->entityType . '("update_status:' . $status->public_id . '")',
+            ];
+        }
+
+        if (count($actions)) {
+            $actions[] = \DropdownButton::DIVIDER;
+        }
+
+        $actions = array_merge($actions, parent::bulkActions());
+
+        return $actions;
     }
 }

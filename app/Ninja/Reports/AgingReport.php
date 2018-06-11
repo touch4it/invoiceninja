@@ -7,19 +7,24 @@ use Auth;
 
 class AgingReport extends AbstractReport
 {
-    public $columns = [
-        'client',
-        'invoice_number',
-        'invoice_date',
-        'due_date',
-        'age' => ['group-number-30'],
-        'amount',
-        'balance',
-    ];
+    public function getColumns()
+    {
+        return [
+            'client' => [],
+            'invoice_number' => [],
+            'invoice_date' => [],
+            'due_date' => [],
+            'age' => [],
+            'amount' => [],
+            'balance' => [],
+        ];
+    }
+
 
     public function run()
     {
         $account = Auth::user()->account;
+        $subgroup = $this->options['subgroup'];
 
         $clients = Client::scope()
                         ->orderBy('name')
@@ -52,6 +57,13 @@ class AgingReport extends AbstractReport
                 //$this->addToTotals($client->currency_id, 'paid', $payment ? $payment->getCompletedAmount() : 0);
                 //$this->addToTotals($client->currency_id, 'amount', $invoice->amount);
                 //$this->addToTotals($client->currency_id, 'balance', $invoice->balance);
+
+                if ($subgroup == 'age') {
+                    $dimension = trans('texts.' .$invoice->present()->ageGroup);
+                } else {
+                    $dimension = $this->getDimension($client);
+                }
+                $this->addChartData($dimension, $invoice->invoice_date, $invoice->balance);
             }
         }
     }

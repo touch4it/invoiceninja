@@ -39,7 +39,7 @@ class BaseController extends Controller
         if ($action == 'restore' && count($ids) == 1) {
             return redirect("{$entityTypes}/" . $ids[0]);
         // when viewing from a datatable list
-        } elseif (strpos($referer, '/clients/')) {
+        } elseif (strpos($referer, '/clients/') || strpos($referer, '/projects/')) {
             return redirect($referer);
         } elseif ($isDatatable || ($action == 'archive' || $action == 'delete')) {
             return redirect("{$entityTypes}");
@@ -49,5 +49,22 @@ class BaseController extends Controller
         } else {
             return redirect("{$entityTypes}");
         }
+    }
+
+    protected function downloadResponse($filename, $contents, $type = 'application/pdf')
+    {
+        header('Content-Type: ' . $type);
+        header('Content-Length: ' . strlen($contents));
+
+        if (! request()->debug) {
+            header('Content-disposition: attachment; filename="' . $filename . '"');
+        }
+
+        header('Cache-Control: public, must-revalidate, max-age=0');
+        header('Last-Modified: ' . gmdate('D, d M Y H:i:s') . ' GMT');
+
+        echo $contents;
+
+        exit;
     }
 }

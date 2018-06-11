@@ -7,23 +7,29 @@ use Auth;
 
 class TaxRateReport extends AbstractReport
 {
-    public $columns = [
-        'client',
-        'invoice',
-        'tax_name',
-        'tax_rate',
-        'amount',
-        'paid',
-    ];
+    public function getColumns()
+    {
+        return [
+            'client' => [],
+            'invoice' => [],
+            'tax_name' => [],
+            'tax_rate' => [],
+            'tax_amount' => [],
+            'tax_paid' => [],
+            'invoice_amount' => ['columnSelector-false'],
+            'payment_amount' => ['columnSelector-false'],
+        ];
+    }
 
     public function run()
     {
         $account = Auth::user()->account;
+        $subgroup = $this->options['subgroup'];
 
         $clients = Client::scope()
                         ->orderBy('name')
                         ->withArchived()
-                        ->with('contacts')
+                        ->with('contacts', 'user')
                         ->with(['invoices' => function ($query) {
                             $query->with('invoice_items')
                                 ->withArchived()
@@ -74,10 +80,15 @@ class TaxRateReport extends AbstractReport
                             $tax['rate'] . '%',
                             $account->formatMoney($tax['amount'], $client),
                             $account->formatMoney($tax['paid'], $client),
+                            $invoice->present()->amount,
+                            $invoice->present()->paid,
                         ];
 
                         $this->addToTotals($client->currency_id, 'amount', $tax['amount']);
                         $this->addToTotals($client->currency_id, 'paid', $tax['paid']);
+
+                        $dimension = $this->getDimension($client);
+                        $this->addChartData($dimension, $invoice->invoice_date, $tax['amount']);
                     }
                 }
             }

@@ -50,7 +50,7 @@ class InvoiceCest
         $this->fillItem($I, 1, 'Item', 'Notes', 64.50, 3);
 
         $I->click('#saveButton');
-        $I->wait(1);
+        $I->wait(2);
         $I->see($invoiceNumber);
         $I->see('199.01');
 
@@ -66,6 +66,7 @@ class InvoiceCest
     {
         $I->selectOption('#invoice_design_id', $designId);
         $I->click('#saveButton');
+        $I->wait(2);
     }
 
     /*
@@ -184,7 +185,7 @@ class InvoiceCest
     {
         $row_selector = sprintf('table.invoice-table tbody tr:nth-child(%d) ', $row);
 
-        $I->fillField($row_selector.'#product_key', $product);
+        $I->fillField($row_selector.'td:nth-child(2) input.tt-input', $product);
         $I->fillField($row_selector.'textarea', $description);
         $I->fillField($row_selector.'td:nth-child(4) input', $cost);
         $I->fillField($row_selector.'td:nth-child(5) input', $quantity);

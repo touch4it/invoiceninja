@@ -164,8 +164,8 @@ class BasePaymentDriver
         }
 
         $url = 'payment/' . $this->invitation->invitation_key;
-        if (request()->update) {
-            $url .= '?update=true';
+        if (request()->capture) {
+            $url .= '?capture=true';
         }
 
         $data = [
@@ -242,10 +242,13 @@ class BasePaymentDriver
                 $rules = array_merge($rules, [
                     'address1' => 'required',
                     'city' => 'required',
-                    'state' => 'required',
                     'postal_code' => 'required',
                     'country_id' => 'required',
                 ]);
+
+                if ($this->account()->requiresAddressState()) {
+                    $rules['state'] = 'required';
+                }
             }
         }
 
@@ -266,7 +269,7 @@ class BasePaymentDriver
 
     public function completeOnsitePurchase($input = false, $paymentMethod = false)
     {
-        $this->input = count($input) ? $input : false;
+        $this->input = $input && count($input) ? $input : false;
         $gateway = $this->gateway();
 
         if ($input) {
@@ -303,13 +306,21 @@ class BasePaymentDriver
             }
         }
 
-        if ($this->isTwoStep() || request()->update) {
+        if ($this->isTwoStep() || request()->capture) {
             return;
         }
 
         // prepare and process payment
         $data = $this->paymentDetails($paymentMethod);
-        $items = $this->paymentItems();
+
+        // TODO move to payment driver class
+        if ($this->isGateway(GATEWAY_SAGE_PAY_DIRECT) || $this->isGateway(GATEWAY_SAGE_PAY_SERVER)) {
+            $items = null;
+        } elseif ($this->account()->send_item_details) {
+            $items = $this->paymentItems();
+        } else {
+            $items = null;
+        }
         $response = $gateway->purchase($data)
                         ->setItems($items)
                         ->send();
@@ -363,12 +374,13 @@ class BasePaymentDriver
 
             $item = new Item([
                 'name' => $invoiceItem->product_key,
-                'description' => $invoiceItem->notes,
+                'description' => substr($invoiceItem->notes, 0, 100),
                 'price' => $invoiceItem->cost,
                 'quantity' => $invoiceItem->qty,
             ]);
 
             $items[] = $item;
+
             $total += $invoiceItem->cost * $invoiceItem->qty;
         }
 
@@ -816,11 +828,6 @@ class BasePaymentDriver
         $invoiceItem = $payment->invoice->invoice_items->first();
         $invoiceItem->notes .= "\n\n#{$license->license_key}";
         $invoiceItem->save();
-
-        // Add the license key to the redirect URL
-        $key = 'redirect_url:' . $payment->invitation->invitation_key;
-        $redirectUrl = session($key);
-        session([$key => "{$redirectUrl}?license_key={$license->license_key}&product_id={$productId}"]);
     }
 
     protected function creatingPayment($payment, $paymentMethod)
@@ -865,6 +872,7 @@ class BasePaymentDriver
         return [
             'amount' => $amount,
             'transactionReference' => $payment->transaction_reference,
+            'currency' => $payment->client->getCurrencyCode(),
         ];
     }
 
@@ -978,8 +986,14 @@ class BasePaymentDriver
 
             $gatewayTypeAlias = GatewayType::getAliasFromId($gatewayTypeId);
 
-            if ($gatewayTypeId == GATEWAY_TYPE_CUSTOM) {
-                $url = 'javascript:showCustomModal();';
+            if ($gatewayTypeId == GATEWAY_TYPE_CUSTOM1) {
+                $url = 'javascript:showCustom1Modal();';
+                $label = e($this->accountGateway->getConfigField('name'));
+            } elseif ($gatewayTypeId == GATEWAY_TYPE_CUSTOM2) {
+                $url = 'javascript:showCustom2Modal();';
+                $label = e($this->accountGateway->getConfigField('name'));
+            } elseif ($gatewayTypeId == GATEWAY_TYPE_CUSTOM3) {
+                $url = 'javascript:showCustom3Modal();';
                 $label = e($this->accountGateway->getConfigField('name'));
             } else {
                 $url = $this->paymentUrl($gatewayTypeAlias);

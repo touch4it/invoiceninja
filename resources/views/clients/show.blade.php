@@ -33,7 +33,7 @@
         </div>
         <div class="col-md-5">
             <div class="pull-right">
-                {!! Former::open('clients/bulk')->addClass('mainForm') !!}
+                {!! Former::open('clients/bulk')->autocomplete('off')->addClass('mainForm') !!}
                 <div style="display:none">
                     {!! Former::text('action') !!}
                     {!! Former::text('public_id')->value($client->public_id) !!}
@@ -52,6 +52,8 @@
                             ->withContents([
                               ($client->trashed() ? false : ['label' => trans('texts.archive_client'), 'url' => "javascript:onArchiveClick()"]),
                               ['label' => trans('texts.delete_client'), 'url' => "javascript:onDeleteClick()"],
+                              auth()->user()->is_admin ? \DropdownButton::DIVIDER : false,
+                              auth()->user()->is_admin ? ['label' => trans('texts.purge_client'), 'url' => "javascript:onPurgeClick()"] : false,
                             ]
                           )->split() !!}
                     @endcan
@@ -66,6 +68,11 @@
 
                 @if ($client->trashed())
                     @can('edit', $client)
+                        @if (auth()->user()->is_admin)
+                            {!! Button::danger(trans('texts.purge_client'))
+                                    ->appendIcon(Icon::create('warning-sign'))
+                                    ->withAttributes(['onclick' => 'onPurgeClick()']) !!}
+                        @endif
                         {!! Button::primary(trans('texts.restore_client'))
                                 ->appendIcon(Icon::create('cloud-download'))
                                 ->withAttributes(['onclick' => 'onRestoreClick()']) !!}
@@ -98,11 +105,11 @@
 		  	   <p><i class="fa fa-vat-number" style="width: 20px"></i>{{ trans('texts.vat_number').': '.$client->vat_number }}</p>
             @endif
 
-            @if ($client->account->custom_client_label1 && $client->custom_value1)
-                {{ $client->account->custom_client_label1 . ': ' . $client->custom_value1 }}<br/>
+            @if ($client->account->customLabel('client1') && $client->custom_value1)
+                {{ $client->account->present()->customLabel('client1') . ': ' }} {!! nl2br(e($client->custom_value1)) !!}<br/>
             @endif
-            @if ($client->account->custom_client_label2 && $client->custom_value2)
-                {{ $client->account->custom_client_label2 . ': ' . $client->custom_value2 }}<br/>
+            @if ($client->account->customLabel('client2') && $client->custom_value2)
+                {{ $client->account->present()->customLabel('client2') . ': ' }} {!! nl2br(e($client->custom_value2)) !!}<br/>
             @endif
 
             @if ($client->work_phone)
@@ -116,18 +123,23 @@
             <p/>
 
             @if ($client->public_notes)
-                <p><i>{{ $client->public_notes }}</i></p>
+                <p><i>{!! nl2br(e($client->public_notes)) !!}</i></p>
             @endif
 
             @if ($client->private_notes)
-                <p><i>{{ $client->private_notes }}</i></p>
+                <p><i>{!! nl2br(e($client->private_notes)) !!}</i></p>
             @endif
 
-  	        @if ($client->client_industry)
-                {{ $client->client_industry->name }}<br/>
-            @endif
-            @if ($client->client_size)
-                {{ $client->client_size->name }}<br/>
+  	        @if ($client->industry || $client->size)
+                @if ($client->industry)
+                    {{ $client->industry->name }}
+                @endif
+                @if ($client->industry && $client->size)
+                    |
+                @endif
+                @if ($client->size)
+                    {{ $client->size->name }}<br/>
+                @endif
             @endif
 
 		  	@if ($client->website)
@@ -153,14 +165,18 @@
         <div class="col-md-3">
 			<h3>{{ trans('texts.address') }}</h3>
 
-            {!! $client->present()->address(ADDRESS_BILLING) !!}<br/>
-            {!! $client->present()->address(ADDRESS_SHIPPING) !!}
+            @if ($client->addressesMatch())
+                {!! $client->present()->address(ADDRESS_BILLING) !!}
+            @else
+                {!! $client->present()->address(ADDRESS_BILLING, true) !!}<br/>
+                {!! $client->present()->address(ADDRESS_SHIPPING, true) !!}
+            @endif
 
         </div>
 
 		<div class="col-md-3">
 			<h3>{{ trans('texts.contacts') }}</h3>
-		  	@foreach ($client->contacts as $contact)
+            @foreach ($client->contacts as $contact)
                 @if ($contact->first_name || $contact->last_name)
                     <b>{{ $contact->first_name.' '.$contact->last_name }}</b><br/>
                 @endif
@@ -171,20 +187,25 @@
                     <i class="fa fa-phone" style="width: 20px"></i>{{ $contact->phone }}<br/>
                 @endif
 
-                @if ($client->account->custom_contact_label1 && $contact->custom_value1)
-                    {{ $client->account->custom_contact_label1 . ': ' . $contact->custom_value1 }}<br/>
+                @if ($client->account->customLabel('contact1') && $contact->custom_value1)
+                    {{ $client->account->present()->customLabel('contact1') . ': ' . $contact->custom_value1 }}<br/>
                 @endif
-                @if ($client->account->custom_contact_label2 && $contact->custom_value2)
-                    {{ $client->account->custom_contact_label2 . ': ' . $contact->custom_value2 }}<br/>
+                @if ($client->account->customLabel('contact2') && $contact->custom_value2)
+                    {{ $client->account->present()->customLabel('contact2') . ': ' . $contact->custom_value2 }}<br/>
                 @endif
 
                 @if (Auth::user()->confirmed && $client->account->enable_client_portal)
                     <i class="fa fa-dashboard" style="width: 20px"></i><a href="{{ $contact->link }}"
-                        onclick="window.open('{{ $contact->link }}?silent=true', '_blank');return false;">{{ trans('texts.view_client_portal') }}
-                    </a><br/>
+                        onclick="window.open('{{ $contact->link }}?silent=true', '_blank');return false;">{{ trans('texts.view_in_portal') }}</a>
+                    @if (config('services.postmark'))
+                        | <a href="#" onclick="showEmailHistory('{{ $contact->email }}')">
+                            {{ trans('texts.email_history') }}
+                        </a>
+                    @endif
+                    <br/>
                 @endif
                 <br/>
-		  	@endforeach
+            @endforeach
 		</div>
 
 		<div class="col-md-3">
@@ -218,10 +239,13 @@
 
 	<ul class="nav nav-tabs nav-justified">
 		{!! Form::tab_link('#activity', trans('texts.activity'), true) !!}
-        @if ($hasTasks && Utils::isPro())
+        @if ($hasTasks)
             {!! Form::tab_link('#tasks', trans('texts.tasks')) !!}
         @endif
-		@if ($hasQuotes && Utils::isPro())
+        @if ($hasExpenses)
+            {!! Form::tab_link('#expenses', trans('texts.expenses')) !!}
+        @endif
+		@if ($hasQuotes)
 			{!! Form::tab_link('#quotes', trans('texts.quotes')) !!}
 		@endif
         @if ($hasRecurringInvoices)
@@ -229,7 +253,9 @@
         @endif
 		{!! Form::tab_link('#invoices', trans('texts.invoices')) !!}
 		{!! Form::tab_link('#payments', trans('texts.payments')) !!}
-		{!! Form::tab_link('#credits', trans('texts.credits')) !!}
+        @if ($account->isModuleEnabled(ENTITY_CREDIT))
+            {!! Form::tab_link('#credits', trans('texts.credits')) !!}
+        @endif
 	</ul><br/>
 
 	<div class="tab-content">
@@ -257,10 +283,21 @@
                 'entityType' => ENTITY_TASK,
                 'datatable' => new \App\Ninja\Datatables\TaskDatatable(true, true),
                 'clientId' => $client->public_id,
+                'url' => url('api/tasks/' . $client->public_id),
             ])
         </div>
     @endif
 
+    @if ($hasExpenses)
+        <div class="tab-pane" id="expenses">
+            @include('list', [
+                'entityType' => ENTITY_EXPENSE,
+                'datatable' => new \App\Ninja\Datatables\ExpenseDatatable(true, true),
+                'clientId' => $client->public_id,
+                'url' => url('api/client_expenses/' . $client->public_id),
+            ])
+        </div>
+    @endif
 
     @if (Utils::hasFeature(FEATURE_QUOTES) && $hasQuotes)
         <div class="tab-pane" id="quotes">
@@ -268,6 +305,7 @@
                 'entityType' => ENTITY_QUOTE,
                 'datatable' => new \App\Ninja\Datatables\InvoiceDatatable(true, true, ENTITY_QUOTE),
                 'clientId' => $client->public_id,
+                'url' => url('api/quotes/' . $client->public_id),
             ])
         </div>
     @endif
@@ -278,6 +316,7 @@
                 'entityType' => ENTITY_RECURRING_INVOICE,
                 'datatable' => new \App\Ninja\Datatables\RecurringInvoiceDatatable(true, true),
                 'clientId' => $client->public_id,
+                'url' => url('api/recurring_invoices/' . $client->public_id),
             ])
         </div>
     @endif
@@ -287,6 +326,7 @@
                 'entityType' => ENTITY_INVOICE,
                 'datatable' => new \App\Ninja\Datatables\InvoiceDatatable(true, true),
                 'clientId' => $client->public_id,
+                'url' => url('api/invoices/' . $client->public_id),
             ])
         </div>
 
@@ -295,18 +335,47 @@
                 'entityType' => ENTITY_PAYMENT,
                 'datatable' => new \App\Ninja\Datatables\PaymentDatatable(true, true),
                 'clientId' => $client->public_id,
+                'url' => url('api/payments/' . $client->public_id),
             ])
         </div>
 
+    @if ($account->isModuleEnabled(ENTITY_CREDIT))
         <div class="tab-pane" id="credits">
             @include('list', [
                 'entityType' => ENTITY_CREDIT,
                 'datatable' => new \App\Ninja\Datatables\CreditDatatable(true, true),
                 'clientId' => $client->public_id,
+                'url' => url('api/credits/' . $client->public_id),
             ])
         </div>
+    @endif
 
     </div>
+
+    <div class="modal fade" id="emailHistoryModal" tabindex="-1" role="dialog" aria-labelledby="emailHistoryModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                    <h4 class="modal-title" id="myModalLabel">{{ trans('texts.email_history') }}</h4>
+                </div>
+
+                <div class="container" style="width: 100%; padding-bottom: 0px !important">
+                <div class="panel panel-default">
+                <div class="panel-body">
+
+                </div>
+                </div>
+                </div>
+
+                <div class="modal-footer" id="signUpFooter" style="margin-top: 0px">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">{{ trans('texts.close') }} </button>
+                    <button type="button" class="btn btn-danger" onclick="onReactivateClick()" id="reactivateButton" style="display:none;">{{ trans('texts.reactivate') }} </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 
 	<script type="text/javascript">
 
@@ -354,12 +423,38 @@
 		$('.mainForm').submit();
 	}
 
-	function onDeleteClick() {
+    function onDeleteClick() {
 		sweetConfirm(function() {
 			$('#action').val('delete');
 			$('.mainForm').submit();
 		});
 	}
+
+    function onPurgeClick() {
+		sweetConfirm(function() {
+			$('#action').val('purge');
+			$('.mainForm').submit();
+		}, "{{ trans('texts.purge_client_warning') . "\\n\\n" . trans('texts.no_undo') }}");
+	}
+
+    function showEmailHistory(email) {
+        window.emailBounceId = false;
+        $('#emailHistoryModal .panel-body').html("{{ trans('texts.loading') }}...");
+        $('#reactivateButton').hide();
+        $('#emailHistoryModal').modal('show');
+        $.post('{{ url('/email_history') }}', {email: email}, function(data) {
+            $('#emailHistoryModal .panel-body').html(data.str);
+            window.emailBounceId = data.bounce_id;
+            $('#reactivateButton').toggle(!! window.emailBounceId);
+        })
+    }
+
+    function onReactivateClick() {
+        $.post('{{ url('/reactivate_email') }}/' + window.emailBounceId, function(data) {
+            $('#emailHistoryModal').modal('hide');
+            swal("{{ trans('texts.reactivated_email') }}")
+        })
+    }
 
     @if ($client->showMap())
         function initialize() {
@@ -371,7 +466,7 @@
             };
 
             var map = new google.maps.Map(mapCanvas, mapOptions)
-            var address = "{{ "{$client->address1} {$client->address2} {$client->city} {$client->state} {$client->postal_code} " . ($client->country ? $client->country->name : '') }}";
+            var address = {!! json_encode(e("{$client->address1} {$client->address2} {$client->city} {$client->state} {$client->postal_code} " . ($client->country ? $client->country->getName() : ''))) !!};
 
             geocoder = new google.maps.Geocoder();
             geocoder.geocode( { 'address': address}, function(results, status) {

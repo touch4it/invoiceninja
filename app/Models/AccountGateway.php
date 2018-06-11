@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use Utils;
+use HTMLUtils;
 use Crypt;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Laracasts\Presenter\PresentableTrait;
@@ -22,6 +24,13 @@ class AccountGateway extends EntityModel
      * @var array
      */
     protected $dates = ['deleted_at'];
+
+    /**
+     * @var array
+     */
+    protected $hidden = [
+        'config'
+    ];
 
     /**
      * @return mixed
@@ -95,7 +104,21 @@ class AccountGateway extends EntityModel
      */
     public function isGateway($gatewayId)
     {
-        return $this->gateway_id == $gatewayId;
+        if (is_array($gatewayId)) {
+            foreach ($gatewayId as $id) {
+                if ($this->gateway_id == $id) {
+                    return true;
+                }
+            }
+            return false;
+        } else {
+            return $this->gateway_id == $gatewayId;
+        }
+    }
+
+    public function isCustom()
+    {
+        return in_array($this->gateway_id, [GATEWAY_CUSTOM1, GATEWAY_CUSTOM2, GATEWAY_CUSTOM3]);
     }
 
     /**
@@ -127,9 +150,9 @@ class AccountGateway extends EntityModel
     /**
      * @return bool|mixed
      */
-    public function getPublishableStripeKey()
+    public function getPublishableKey()
     {
-        if (! $this->isGateway(GATEWAY_STRIPE)) {
+        if (! $this->isGateway([GATEWAY_STRIPE, GATEWAY_PAYMILL])) {
             return false;
         }
 
@@ -254,7 +277,7 @@ class AccountGateway extends EntityModel
             return null;
         }
 
-        $stripe_key = $this->getPublishableStripeKey();
+        $stripe_key = $this->getPublishableKey();
 
         return substr(trim($stripe_key), 0, 8) == 'pk_test_' ? 'tartan' : 'production';
     }
@@ -267,5 +290,32 @@ class AccountGateway extends EntityModel
         $account = $this->account ? $this->account : Account::find($this->account_id);
 
         return \URL::to(env('WEBHOOK_PREFIX', '').'payment_hook/'.$account->account_key.'/'.$this->gateway_id.env('WEBHOOK_SUFFIX', ''));
+    }
+
+    public function isTestMode()
+    {
+        if ($this->isGateway(GATEWAY_STRIPE)) {
+            return strpos($this->getPublishableKey(), 'test') !== false;
+        } else {
+            return $this->getConfigField('testMode');
+        }
+    }
+
+    public function getCustomHtml($invitation)
+    {
+        $text = $this->getConfigField('text');
+
+        if ($text == strip_tags($text)) {
+            $text = nl2br($text);
+        }
+
+        if (Utils::isNinja()) {
+            $text = HTMLUtils::sanitizeHTML($text);
+        }
+
+        $templateService = app('App\Services\TemplateService');
+        $text = $templateService->processVariables($text, ['invitation' => $invitation]);
+
+        return $text;
     }
 }

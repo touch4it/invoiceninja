@@ -2,9 +2,12 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Account;
 use App\Models\Contact;
 use App\Models\Invitation;
+use App\Models\ProposalInvitation;
 use Auth;
+use Utils;
 use Closure;
 use Session;
 
@@ -25,13 +28,14 @@ class Authenticate
     public function handle($request, Closure $next, $guard = 'user')
     {
         $authenticated = Auth::guard($guard)->check();
+        $invitationKey = $request->invitation_key ?: $request->proposal_invitation_key;
 
         if ($guard == 'client') {
-            if (! empty($request->invitation_key)) {
+            if (! empty($request->invitation_key) || ! empty($request->proposal_invitation_key)) {
                 $contact_key = session('contact_key');
                 if ($contact_key) {
                     $contact = $this->getContact($contact_key);
-                    $invitation = $this->getInvitation($request->invitation_key);
+                    $invitation = $this->getInvitation($invitationKey, ! empty($request->proposal_invitation_key));
 
                     if (! $invitation) {
                         return response()->view('error', [
@@ -59,7 +63,7 @@ class Authenticate
             $contact = false;
             if ($contact_key) {
                 $contact = $this->getContact($contact_key);
-            } elseif ($invitation = $this->getInvitation($request->invitation_key)) {
+            } elseif ($invitation = $this->getInvitation($invitationKey, ! empty($request->proposal_invitation_key))) {
                 $contact = $invitation->contact;
                 Session::put('contact_key', $contact->contact_key);
             }
@@ -89,6 +93,7 @@ class Authenticate
 
             if ($authenticated) {
                 $request->merge(['contact' => $contact]);
+                $account->loadLocalizationSettings($contact->client);
             }
         }
 
@@ -96,7 +101,21 @@ class Authenticate
             if ($request->ajax()) {
                 return response('Unauthorized.', 401);
             } else {
-                return redirect()->guest($guard == 'client' ? '/client/login' : '/login');
+                if ($guard == 'client') {
+                    $url = '/client/login';
+                    if (Utils::isNinjaProd()) {
+                        if ($account && Utils::getSubdomain() == 'app') {
+                            $url .= '?account_key=' . $account->account_key;
+                        }
+                    } else {
+                        if ($account && Account::count() > 1) {
+                            $url .= '?account_key=' . $account->account_key;
+                        }
+                    }
+                } else {
+                    $url = '/login';
+                }
+                return redirect()->guest($url);
             }
         }
 
@@ -108,7 +127,7 @@ class Authenticate
      *
      * @return \Illuminate\Database\Eloquent\Model|null|static
      */
-    protected function getInvitation($key)
+    protected function getInvitation($key, $isProposal = false)
     {
         if (! $key) {
             return false;
@@ -118,7 +137,12 @@ class Authenticate
         list($key) = explode('&', $key);
         $key = substr($key, 0, RANDOM_KEY_LENGTH);
 
-        $invitation = Invitation::withTrashed()->where('invitation_key', '=', $key)->first();
+        if ($isProposal) {
+            $invitation = ProposalInvitation::withTrashed()->where('invitation_key', '=', $key)->first();
+        } else {
+            $invitation = Invitation::withTrashed()->where('invitation_key', '=', $key)->first();
+        }
+
         if ($invitation && ! $invitation->is_deleted) {
             return $invitation;
         } else {
