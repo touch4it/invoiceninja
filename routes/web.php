@@ -154,8 +154,8 @@ Route::group(['middleware' => ['lookup:user', 'auth:user']], function () {
     Route::post('email_history', 'ClientController@getEmailHistory');
     Route::post('reactivate_email/{bounce_id}', 'ClientController@reactivateEmail');
 
-    Route::get('time_tracker', 'TimeTrackerController@index');
-    Route::get('tasks/kanban/{client_id?}/{project_id?}', 'TaskKanbanController@index');
+    //Route::get('time_tracker', 'TimeTrackerController@index');
+    //Route::get('tasks/kanban/{client_id?}/{project_id?}', 'TaskKanbanController@index');
     Route::post('task_statuses', 'TaskKanbanController@storeStatus');
     Route::put('task_statuses/{task_status_id}', 'TaskKanbanController@updateStatus');
     Route::delete('task_statuses/{task_status_id}', 'TaskKanbanController@deleteStatus');

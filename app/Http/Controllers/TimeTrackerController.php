@@ -13,6 +13,7 @@ class TimeTrackerController extends Controller
 {
     public function index()
     {
+        redirect("/");
         $user = auth()->user();
         $account = $user->account;
 

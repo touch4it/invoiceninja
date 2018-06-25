@@ -112,10 +112,7 @@
 		  		});
 			});
 		</script>
-	@elseif ($entityType == ENTITY_TASK)
-		{!! Button::normal(trans('texts.kanban'))->asLinkTo(url('/tasks/kanban' . (! empty($clientId) ? ('/' . $clientId . (! empty($projectId) ? '/' . $projectId : '')) : '')))->appendIcon(Icon::create('th')) !!}
-		{!! Button::normal(trans('texts.time_tracker'))->asLinkTo('javascript:openTimeTracker()')->appendIcon(Icon::create('time')) !!}
-    @endif
+	    @endif
 
 	@if (Auth::user()->can('create', $entityType) && empty($vendorId))
     	{!! Button::primary(mtrans($entityType, "new_{$entityType}"))
