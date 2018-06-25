@@ -25,12 +25,14 @@ class RunReport extends Job
      */
     public function handle()
     {
-        if (! $this->user->hasPermission('view_all')) {
+        if (! ( $this->user->hasPermission('view_all') ||  $this->user->hasPermission('manage_own_tasks'))) {
             return false;
         }
 
         $reportType = $this->reportType;
         $config = $this->config;
+        $config['subgroup'] = ! empty($config['subgroup']) ? $config['subgroup'] : false; // don't yet support charts in export
+
         $isExport = $this->isExport;
         $reportClass = '\\App\\Ninja\\Reports\\' . Str::studly($reportType) . 'Report';
 
@@ -61,17 +63,8 @@ class RunReport extends Job
             $endDate = $config['end_date'];
         }
 
-        // send email as user
-        if (App::runningInConsole() && $this->user) {
-            auth()->onceUsingId($this->user->id);
-        }
-
         $report = new $reportClass($startDate, $endDate, $isExport, $config);
         $report->run();
-
-        if (App::runningInConsole() && $this->user) {
-            auth()->logout();
-        }
 
         $params = [
             'startDate' => $startDate,

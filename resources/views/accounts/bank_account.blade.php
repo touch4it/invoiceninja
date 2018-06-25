@@ -39,19 +39,21 @@
                             ->data_bind('combobox: bank_id')
                             ->addOption('', '')
                             ->fromQuery($banks, 'name', 'id')
-                            ->blockHelp(trans('texts.bank_accounts_help', ['link' => OFX_HOME_URL]))  !!}
+                            ->blockHelp(trans('texts.bank_accounts_help', ['link' => link_to(OFX_HOME_URL, trans('texts.us_banks'), ['target' => '_blank'])]))  !!}
                 @endif
 
                 <br/>
 
                 {!! Former::password('bank_username')
                         ->data_bind("value: bank_username, valueUpdate: 'afterkeydown'")
-                        ->label(trans('texts.username')) !!}
+                        ->label(trans('texts.username'))
+                        ->data_lpignore('true') !!}
 
                 {!! Former::password('bank_password')
                         ->label(trans('texts.password'))
                         ->data_bind("value: bank_password, valueUpdate: 'afterkeydown'")
-                        ->blockHelp(trans(Request::secure() ? 'texts.bank_password_help' : 'texts.bank_password_warning')) !!}
+                        ->blockHelp(trans(Request::secure() ? 'texts.bank_password_help' : 'texts.bank_password_warning'))
+                        ->data_lpignore('true') !!}
 
                 <br/>
 
@@ -66,7 +68,10 @@
                         ->addOption('101', 101)
                         ->addOption('102', 102)
                         ->addOption('103', 103)
-                        ->help('ofx_help') !!}
+                        ->help(trans('texts.ofx_help', [
+                            'ofxhome_link' => link_to('http://www.ofxhome.com/index.php/home/directory', 'OFX Home', ['target' => '_blank', 'id' => 'ofxLink']),
+                            'ofxget_link' => link_to('http://www.ofxhome.com/index.php/home/ofxget', 'Ofxget', ['target' => '_blank']),
+                        ])) !!}
 
             </div>
         </div>
@@ -298,7 +303,27 @@
     }
 
     $(function() {
-        $('#bank_id').focus();
+
+        var banks = {!! $banks || '[]' !!};
+        var bankMap = {};
+
+        for (var i=0; i<banks.length; i++) {
+            var bank = banks[i];
+            bankMap[bank.id] = bank;
+        }
+
+        $('#bank_id')
+            .change(function(event) {
+                var bankId = $(event.currentTarget).val();
+                bankId = bankMap[bankId] ? bankMap[bankId].remote_id : false;
+                if (bankId) {
+                    var link = 'http://www.ofxhome.com/index.php/institution/view/' + bankId;
+                } else {
+                    var link = 'http://www.ofxhome.com/index.php/home/directory';
+                }
+                $('#ofxLink').attr('href', link);
+            })
+            .focus();
     });
 
     var TransactionModel = function(data) {

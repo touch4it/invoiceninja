@@ -63,7 +63,7 @@ class StripePaymentDriver extends BasePaymentDriver
 
     public function tokenize()
     {
-        return $this->accountGateway->getPublishableStripeKey();
+        return $this->accountGateway->getPublishableKey();
     }
 
     public function rules()
@@ -114,7 +114,7 @@ class StripePaymentDriver extends BasePaymentDriver
         $this->tokenResponse = $response->getData();
 
         // import Stripe tokens created before payment methods table was added
-        if (! count($customer->payment_methods)) {
+        if (! $customer->payment_methods->count()) {
             if ($paymentMethod = $this->createPaymentMethod($customer)) {
                 $customer->default_payment_method_id = $paymentMethod->id;
                 $customer->save();
@@ -408,7 +408,7 @@ class StripePaymentDriver extends BasePaymentDriver
                     'account' => $this->account(),
                     'invitation' => $this->invitation,
                     'invoiceNumber' => $invoiceNumber,
-                    'amount' => $amount,
+                    'amount' => $this->invoice()->getRequestedAmount(),
                     'source' => $response,
                 ]);
             } else {

@@ -36,17 +36,36 @@ class ExpensePresenter extends EntityPresenter
 
     public function month()
     {
-        return Carbon::parse($this->entity->payment_date)->format('Y m');
+        return Carbon::parse($this->entity->expense_date)->format('Y m');
     }
 
     public function amount()
     {
-        return Utils::formatMoney($this->entity->amount, $this->entity->expense_currency_id);
+        return Utils::formatMoney($this->entity->amountWithTax(), $this->entity->expense_currency_id);
+    }
+
+    public function currencyCode()
+    {
+        return Utils::getFromCache($this->entity->expense_currency_id, 'currencies')->code;
+    }
+
+    public function taxAmount()
+    {
+        return Utils::formatMoney($this->entity->taxAmount(), $this->entity->expense_currency_id);
     }
 
     public function category()
     {
         return $this->entity->expense_category ? $this->entity->expense_category->name : '';
+    }
+
+    public function payment_type()
+    {
+        if (! $this->payment_type_id) {
+            return '';
+        }
+
+        return Utils::getFromCache($this->payment_type_id, 'paymentTypes')->name;
     }
 
     public function calendarEvent($subColors = false)

@@ -110,6 +110,12 @@ class InvoiceController extends BaseController
             $invoice->invoice_status_id = 0;
             $invoice->invoice_date = date_create()->format('Y-m-d');
             $invoice->deleted_at = null;
+            while ($invoice->documents->count()) {
+                $invoice->documents->pop();
+            }
+            while ($invoice->expenses->count()) {
+                $invoice->expenses->pop();
+            }
             $method = 'POST';
             $url = "{$entityType}s";
         } else {
@@ -134,7 +140,7 @@ class InvoiceController extends BaseController
 
         $lastSent = ($invoice->is_recurring && $invoice->last_sent_date) ? $invoice->recurring_invoices->last() : null;
 
-        if (! Auth::user()->hasPermission('view_all')) {
+        if (! Auth::user()->hasPermission('view_all') && ! Auth::user()->hasPermission('manage_own_tasks')) {
             $clients = $clients->where('clients.user_id', '=', Auth::user()->id);
         }
 
@@ -205,9 +211,9 @@ class InvoiceController extends BaseController
         $invoice->loadFromRequest();
 
         $clients = Client::scope()->with('contacts', 'country')->orderBy('name');
-        if (! Auth::user()->hasPermission('view_all')) {
-            $clients = $clients->where('clients.user_id', '=', Auth::user()->id);
-        }
+//        if (! Auth::user()->hasPermission('view_all') && ! Auth::user()->hasPermission('manage_own_tasks')) {
+//            $clients = $clients->where('clients.user_id', '=', Auth::user()->id);
+//        }
 
         $data = [
             'clients' => $clients->get(),
@@ -321,7 +327,7 @@ class InvoiceController extends BaseController
             'invoiceLabels' => Auth::user()->account->getInvoiceLabels(),
             'tasks' => Session::get('tasks') ? Session::get('tasks') : null,
             'expenseCurrencyId' => Session::get('expenseCurrencyId') ?: null,
-            'expenses' => Session::get('expenses') ? Expense::scope(Session::get('expenses'))->with('documents', 'expense_category')->get() : [],
+            'expenses' => Expense::scope(Session::get('expenses'))->with('documents', 'expense_category')->get(),
         ];
     }
 
@@ -403,7 +409,11 @@ class InvoiceController extends BaseController
         }
 
         if (! Auth::user()->confirmed) {
-            $errorMessage = trans(Auth::user()->registered ? 'texts.confirmation_required' : 'texts.registration_required');
+            if (Auth::user()->registered) {
+                $errorMessage = trans('texts.confirmation_required', ['link' => link_to('/resend_confirmation', trans('texts.click_here'))]);
+            } else {
+                $errorMessage = trans('texts.registration_required');
+            }
             Session::flash('error', $errorMessage);
 
             return Redirect::to('invoices/'.$invoice->public_id.'/edit');
@@ -602,6 +612,12 @@ class InvoiceController extends BaseController
             'invoice_settings' => Auth::user()->hasFeature(FEATURE_INVOICE_SETTINGS),
         ];
         $invoice->invoice_type_id = intval($invoice->invoice_type_id);
+
+        if ($invoice->client->shipping_address1) {
+            foreach (['address1', 'address2', 'city', 'state', 'postal_code', 'country_id'] as $field) {
+                $invoice->client->$field = $invoice->client->{'shipping_' . $field};
+            }
+        }
 
         $data = [
             'invoice' => $invoice,

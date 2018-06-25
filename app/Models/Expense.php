@@ -52,6 +52,8 @@ class Expense extends EntityModel
         'transaction_reference',
         'invoice_documents',
         'should_be_invoiced',
+        'custom_value1',
+        'custom_value2',
     ];
 
     public static function getImportColumns()
@@ -61,8 +63,12 @@ class Expense extends EntityModel
             'vendor',
             'amount',
             'public_notes',
+            'private_notes',
             'expense_category',
             'expense_date',
+            'payment_type',
+            'payment_date',
+            'transaction_reference',
         ];
     }
 
@@ -73,8 +79,12 @@ class Expense extends EntityModel
             'category' => 'expense_category',
             'client' => 'client',
             'vendor' => 'vendor',
-            'notes|details' => 'public_notes',
-            'date' => 'expense_date',
+            'notes|details^private' => 'public_notes',
+            'notes|details^public' => 'private_notes',
+            'date^payment' => 'expense_date',
+            'payment type' => 'payment_type',
+            'payment date' => 'payment_date',
+            'reference' => 'transaction_reference',
         ];
     }
 
@@ -253,6 +263,11 @@ class Expense extends EntityModel
     }
 
     public function amountWithTax()
+    {
+        return $this->amount + $this->taxAmount();
+    }
+
+    public function taxAmount()
     {
         return Utils::calculateTaxes($this->amount, $this->tax_rate1, $this->tax_rate2);
     }

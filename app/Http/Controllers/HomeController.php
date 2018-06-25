@@ -67,7 +67,7 @@ class HomeController extends BaseController
     {
         // Track the referral/campaign code
         if (Input::has('rc')) {
-            Session::set(SESSION_REFERRAL_CODE, Input::get('rc'));
+            session([SESSION_REFERRAL_CODE => Input::get('rc')]);
         }
 
         if (Auth::check()) {
@@ -146,19 +146,14 @@ class HomeController extends BaseController
         }
 
         Mail::raw($message, function ($message) {
-            $subject = 'Customer Message: ';
+            $subject = 'Customer Message [';
             if (Utils::isNinjaProd()) {
-                $subject .= str_replace('db-', '', config('database.default'));
-                $account = Auth::user()->account;
-                if ($account->isEnterprise()) {
-                    $subject .= 'E';
-                } elseif ($account->isPro()) {
-                    $subject .= 'P';
-                }
+                $subject .= str_replace('db-ninja-', '', config('database.default'));
+                $subject .= Auth::user()->present()->statusCode . '] ';
             } else {
-                $subject .= 'Self-Host';
+                $subject .= 'Self-Host] | ';
             }
-            $subject .= ' | ' . date('r');
+            $subject .= date('M jS, g:ia');
             $message->to(env('CONTACT_EMAIL', 'contact@invoiceninja.com'))
                     ->from(CONTACT_EMAIL, Auth::user()->present()->fullName)
                     ->replyTo(Auth::user()->email, Auth::user()->present()->fullName)

@@ -3,14 +3,17 @@
 @section('head')
     @parent
 
-    @if ($accountGateway->getPublishableStripeKey())
+    @if ($accountGateway->getPublishableKey())
         <script type="text/javascript" src="https://js.stripe.com/v2/"></script>
         <script type="text/javascript">
-            Stripe.setPublishableKey('{{ $accountGateway->getPublishableStripeKey() }}');
+            Stripe.setPublishableKey('{{ $accountGateway->getPublishableKey() }}');
             $(function() {
-                var countries = {!! Cache::get('countries')->pluck('iso_3166_2','id') !!};
                 $('.payment-form').unbind('submit').submit(function(event) {
-                    if($('[name=plaidAccountId]').length)return;
+                    event.preventDefault();
+
+                    if ($('[name=plaidAccountId]').length) {
+                        return;
+                    }
 
                     var $form = $(this);
 
@@ -46,6 +49,10 @@
                         }
                     }
 
+                    if ($form.find('button').is(':disabled')) {
+                        return false;
+                    }
+
                     // Disable the submit button to prevent repeated clicks
                     $form.find('button').prop('disabled', true);
                     $('#js-error-message').hide();
@@ -76,7 +83,8 @@
                         $form.get(0).submit();
                     } else {
                         $('#js-error-message').html('An error occurred').fadeIn();
-                        logError('STRIPE_ERROR:' + JSON.stringify(response));
+                        $form.find('button').prop('disabled', false);
+                        logError('STRIPE_ERROR: ' + JSON.stringify(response));
                     }
                 }
             };

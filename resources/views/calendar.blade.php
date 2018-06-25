@@ -26,7 +26,7 @@
 @section('top-right')
 	<div id="entityTypeFilterWrapper" style="display:none">
 	    <select class="form-control" style="width: 220px;" id="entityTypeFilter" multiple="true">
-	        @foreach ([ENTITY_INVOICE, ENTITY_QUOTE, ENTITY_PAYMENT, ENTITY_TASK, ENTITY_EXPENSE] as $value)
+	        @foreach ([ENTITY_INVOICE, ENTITY_PAYMENT, ENTITY_QUOTE, ENTITY_PROJECT, ENTITY_TASK, ENTITY_EXPENSE] as $value)
 	            <option value="{{ $value }}">{{ trans("texts.{$value}") }}</option>
 	        @endforeach
 	    </select>
@@ -86,7 +86,7 @@
 				defaultDate: '{{ date('Y-m-d') }}',
 				eventLimit: true,
 				events: {
-					url: '{{ url('/calendar_events') }}',
+					url: '{{ url('/reports/calendar_events') }}',
 					type: 'GET',
 					data: function() {
 						return {

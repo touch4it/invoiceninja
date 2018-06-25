@@ -15,9 +15,11 @@ Route::post('/get_started', 'AccountController@getStarted');
 
 // Client visible pages
 Route::group(['middleware' => ['lookup:contact', 'auth:client']], function () {
-    Route::get('view/{invitation_key}', 'ClientPortalController@view');
+    Route::get('view/{invitation_key}', 'ClientPortalController@viewInvoice');
+    Route::get('proposal/{proposal_invitation_key}/download', 'ClientPortalProposalController@downloadProposal');
+    Route::get('proposal/{proposal_invitation_key}', 'ClientPortalProposalController@viewProposal');
     Route::get('download/{invitation_key}', 'ClientPortalController@download');
-    Route::put('sign/{invitation_key}', 'ClientPortalController@sign');
+    Route::put('authorize/{invitation_key}', 'ClientPortalController@authorizeInvoice');
     Route::get('view', 'HomeController@viewLogo');
     Route::get('approve/{invitation_key}', 'QuoteController@approve');
     Route::get('payment/{invitation_key}/{gateway_type?}/{source_id?}', 'OnlinePaymentController@showPayment');
@@ -29,6 +31,8 @@ Route::group(['middleware' => ['lookup:contact', 'auth:client']], function () {
     Route::post('client/payment_methods/verify', 'ClientPortalController@verifyPaymentMethod');
     Route::post('client/payment_methods/default', 'ClientPortalController@setDefaultPaymentMethod');
     Route::post('client/payment_methods/{source_id}/remove', 'ClientPortalController@removePaymentMethod');
+    Route::get('client/details', 'ClientPortalController@showDetails');
+    Route::post('client/details', 'ClientPortalController@updateDetails');
     Route::get('client/quotes', 'ClientPortalController@quoteIndex');
     Route::get('client/credits', 'ClientPortalController@creditIndex');
     Route::get('client/invoices', 'ClientPortalController@invoiceIndex');
@@ -93,7 +97,7 @@ Route::group(['middleware' => ['lookup:user']], function () {
 
 // Client auth
 Route::get('/client/login', ['as' => 'login', 'uses' => 'ClientAuth\LoginController@showLoginForm']);
-Route::get('/client/logout', ['as' => 'logout', 'uses' => 'ClientAuth\LoginController@getLogout']);
+Route::get('/client/logout', ['as' => 'logout', 'uses' => 'ClientAuth\LoginController@getLogoutWrapper']);
 Route::get('/client/session_expired', ['as' => 'logout', 'uses' => 'ClientAuth\LoginController@getSessionExpired']);
 Route::get('/client/recover_password', ['as' => 'forgot', 'uses' => 'ClientAuth\ForgotPasswordController@showLinkRequestForm']);
 Route::get('/client/password/reset/{token}', ['as' => 'forgot', 'uses' => 'ClientAuth\ResetPasswordController@showResetForm']);
@@ -102,7 +106,12 @@ Route::group(['middleware' => ['lookup:contact']], function () {
     Route::post('/client/login', ['as' => 'login', 'uses' => 'ClientAuth\LoginController@login']);
     Route::post('/client/recover_password', ['as' => 'forgot', 'uses' => 'ClientAuth\ForgotPasswordController@sendResetLinkEmail']);
     Route::post('/client/password/reset', ['as' => 'forgot', 'uses' => 'ClientAuth\ResetPasswordController@reset']);
+    Route::get('/proposal/image/{account_key}/{document_key}/{filename?}', 'ClientPortalProposalController@getProposalImage');
 });
+
+if (Utils::isSelfHost()) {
+    Route::get('/run_command', 'AppController@runCommand');
+}
 
 if (Utils::isReseller()) {
     Route::post('/reseller_stats', 'AppController@stats');
@@ -124,6 +133,7 @@ Route::group(['middleware' => ['lookup:user', 'auth:user']], function () {
     Route::post('save_sidebar_state', 'UserController@saveSidebarState');
     Route::post('contact_us', 'HomeController@contactUs');
     Route::post('handle_command', 'BotController@handleCommand');
+    Route::post('accept_terms', 'UserController@acceptTerms');
 
     Route::post('signup/validate', 'AccountController@checkEmail');
     Route::post('signup/submit', 'AccountController@submitSignup');
@@ -141,10 +151,17 @@ Route::group(['middleware' => ['lookup:user', 'auth:user']], function () {
     Route::get('api/activities/{client_id?}', 'ActivityController@getDatatable');
     Route::post('clients/bulk', 'ClientController@bulk');
     Route::get('clients/statement/{client_id}/{status_id?}/{start_date?}/{end_date?}', 'ClientController@statement');
+    Route::post('email_history', 'ClientController@getEmailHistory');
+    Route::post('reactivate_email/{bounce_id}', 'ClientController@reactivateEmail');
 
-    Route::get('time_tracker', 'TimeTrackerController@index');
+    //Route::get('time_tracker', 'TimeTrackerController@index');
+    //Route::get('tasks/kanban/{client_id?}/{project_id?}', 'TaskKanbanController@index');
+    Route::post('task_statuses', 'TaskKanbanController@storeStatus');
+    Route::put('task_statuses/{task_status_id}', 'TaskKanbanController@updateStatus');
+    Route::delete('task_statuses/{task_status_id}', 'TaskKanbanController@deleteStatus');
+    Route::put('task_status_order/{task_id}', 'TaskKanbanController@updateTask');
     Route::resource('tasks', 'TaskController');
-    Route::get('api/tasks/{client_id?}', 'TaskController@getDatatable');
+    Route::get('api/tasks/{client_id?}/{project_id?}', 'TaskController@getDatatable');
     Route::get('tasks/create/{client_id?}/{project_id?}', 'TaskController@create');
     Route::post('tasks/bulk', 'TaskController@bulk');
     Route::get('projects', 'ProjectController@index');
@@ -153,7 +170,7 @@ Route::group(['middleware' => ['lookup:user', 'auth:user']], function () {
     Route::post('projects', 'ProjectController@store');
     Route::put('projects/{projects}', 'ProjectController@update');
     Route::get('projects/{projects}/edit', 'ProjectController@edit');
-    Route::get('projects/{projects}', 'ProjectController@edit');
+    Route::get('projects/{projects}', 'ProjectController@show');
     Route::post('projects/bulk', 'ProjectController@bulk');
 
     Route::get('api/recurring_invoices/{client_id?}', 'InvoiceController@getRecurringDatatable');
@@ -198,6 +215,32 @@ Route::group(['middleware' => ['lookup:user', 'auth:user']], function () {
     Route::get('api/quotes/{client_id?}', 'QuoteController@getDatatable');
     Route::post('quotes/bulk', 'QuoteController@bulk');
 
+    Route::post('proposals/categories/bulk', 'ProposalCategoryController@bulk');
+    Route::get('proposals/categories/{proposal_categories}/edit', 'ProposalCategoryController@edit');
+    Route::get('proposals/categories/create', 'ProposalCategoryController@create');
+    Route::resource('proposals/categories', 'ProposalCategoryController');
+    Route::get('api/proposal_categories', 'ProposalCategoryController@getDatatable');
+
+    Route::post('proposals/snippets/bulk', 'ProposalSnippetController@bulk');
+    Route::get('proposals/snippets/{proposal_snippets}/edit', 'ProposalSnippetController@edit');
+    Route::get('proposals/snippets/create', 'ProposalSnippetController@create');
+    Route::resource('proposals/snippets', 'ProposalSnippetController');
+    Route::get('api/proposal_snippets', 'ProposalSnippetController@getDatatable');
+
+    Route::get('proposals/templates/{proposal_templates}/clone', 'ProposalTemplateController@cloneProposal');
+    Route::post('proposals/templates/bulk', 'ProposalTemplateController@bulk');
+    Route::get('proposals/templates/{proposal_templates}/edit', 'ProposalTemplateController@edit');
+    Route::get('proposals/templates/create', 'ProposalTemplateController@create');
+    Route::resource('proposals/templates', 'ProposalTemplateController');
+    Route::get('api/proposal_templates', 'ProposalTemplateController@getDatatable');
+
+    Route::post('proposals/bulk', 'ProposalController@bulk');
+    Route::get('proposals/{proposals}/edit', 'ProposalController@edit');
+    Route::get('proposals/{proposals}/download', 'ProposalController@download');
+    Route::get('proposals/create/{invoice_id?}/{proposal_template_id?}', 'ProposalController@create');
+    Route::resource('proposals', 'ProposalController');
+    Route::get('api/proposals', 'ProposalController@getDatatable');
+
     Route::resource('payments', 'PaymentController');
     Route::get('payments/create/{client_id?}/{invoice_id?}', 'PaymentController@create');
     Route::get('api/payments/{client_id?}', 'PaymentController@getDatatable');
@@ -208,6 +251,7 @@ Route::group(['middleware' => ['lookup:user', 'auth:user']], function () {
     Route::get('api/credits/{client_id?}', 'CreditController@getDatatable');
     Route::post('credits/bulk', 'CreditController@bulk');
 
+    Route::get('products/{products}/clone', 'ProductController@cloneProduct');
     Route::get('api/products', 'ProductController@getDatatable');
     Route::resource('products', 'ProductController');
     Route::post('products/bulk', 'ProductController@bulk');
@@ -222,10 +266,11 @@ Route::group(['middleware' => ['lookup:user', 'auth:user']], function () {
 
     // Expense
     Route::resource('expenses', 'ExpenseController');
-    Route::get('expenses/create/{vendor_id?}/{client_id?}/{category_id?}', 'ExpenseController@create');
+    Route::get('expenses/create/{client_id?}/{vendor_id?}/{category_id?}', 'ExpenseController@create');
     Route::get('expenses/{expenses}/clone', 'ExpenseController@cloneExpense');
     Route::get('api/expenses', 'ExpenseController@getDatatable');
-    Route::get('api/expenses/{id}', 'ExpenseController@getDatatableVendor');
+    Route::get('api/vendor_expenses/{id}', 'ExpenseController@getDatatableVendor');
+    Route::get('api/client_expenses/{id}', 'ExpenseController@getDatatableClient');
     Route::post('expenses/bulk', 'ExpenseController@bulk');
     Route::get('expense_categories', 'ExpenseCategoryController@index');
     Route::get('api/expense_categories', 'ExpenseCategoryController@getDatatable');
@@ -245,8 +290,10 @@ Route::group(['middleware' => ['lookup:user', 'auth:user']], function () {
 
     Route::get('reports', 'ReportController@showReports');
     Route::post('reports', 'ReportController@showReports');
-    Route::get('calendar', 'CalendarController@showCalendar');
-    Route::get('calendar_events', 'CalendarController@loadEvents');
+    Route::get('reports/calendar', 'CalendarController@showCalendar');
+    Route::get('reports/calendar_events', 'CalendarController@loadEvents');
+    Route::get('reports/emails', 'ReportController@showEmailReport');
+    Route::get('reports/emails_report/{start_date}/{end_date}', 'ReportController@loadEmailReport');
 });
 
 Route::group([
@@ -262,6 +309,7 @@ Route::group([
     Route::get('/unlink_account/{user_account_id}/{user_id}', 'UserController@unlinkAccount');
     Route::get('/manage_companies', 'UserController@manageCompanies');
     Route::get('/errors', 'AppController@errors');
+    Route::get('/test_headless', 'AppController@testHeadless');
 
     Route::get('api/tokens', 'TokenController@getDatatable');
     Route::resource('tokens', 'TokenController');
@@ -285,8 +333,6 @@ Route::group([
     Route::post('settings/purge_data', 'AccountController@purgeData');
     Route::post('settings/company_details', 'AccountController@updateDetails');
     Route::post('settings/{section?}', 'AccountController@doSection');
-
-    Route::post('user/setTheme', 'UserController@setTheme');
     Route::post('remove_logo', 'AccountController@removeLogo');
 
     Route::post('/export', 'ExportController@doExport');
@@ -315,9 +361,10 @@ Route::group([
     Route::post('bank_accounts/bulk', 'BankAccountController@bulk');
     Route::post('bank_accounts/validate', 'BankAccountController@validateAccount');
     Route::post('bank_accounts/import_expenses/{bank_id}', 'BankAccountController@importExpenses');
-    Route::get('self-update', 'SelfUpdateController@index');
-    Route::post('self-update', 'SelfUpdateController@update');
-    Route::get('self-update/download', 'SelfUpdateController@download');
+
+    //Route::get('self-update', 'SelfUpdateController@index');
+    //Route::post('self-update', 'SelfUpdateController@update');
+    //Route::get('self-update/download', 'SelfUpdateController@download');
 });
 
 Route::group(['middleware' => ['lookup:user', 'auth:user']], function () {

@@ -68,6 +68,11 @@ elixir(function(mix) {
     ], 'public/css/daterangepicker.css');
 
     mix.styles([
+        bowerDir + '/grapesjs/dist/css/grapes.min.css',
+        //'grapesjs-preset-newsletter.css',
+    ], 'public/css/grapesjs.css');
+
+    mix.styles([
         bowerDir + '/jt.timepicker/jquery.timepicker.css'
     ], 'public/css/jquery.timepicker.css');
 
@@ -95,13 +100,18 @@ elixir(function(mix) {
     mix.scripts([
         'pdf_viewer.js',
         'compatibility.js',
-        bowerDir + '/pdfmake/build/pdfmake.js',
+        //bowerDir + '/pdfmake/build/pdfmake.js',
+        'pdfmake.js',
         'vfs.js'
     ], 'public/pdf.built.js');
 
     mix.scripts([
         bowerDir + '/bootstrap-daterangepicker/daterangepicker.js'
     ], 'public/js/daterangepicker.min.js');
+
+    mix.scripts([
+        bowerDir + '/grapesjs/dist/grapes.js',
+    ], 'public/js/grapesjs.min.js');
 
     mix.scripts([
         bowerDir + '/jt.timepicker/jquery.timepicker.js'
@@ -125,6 +135,7 @@ elixir(function(mix) {
         bowerDir + '/tablesorter/dist/js/widgets/widget-grouping.min.js',
         bowerDir + '/tablesorter/dist/js/widgets/widget-uitheme.min.js',
         bowerDir + '/tablesorter/dist/js/widgets/widget-filter.min.js',
+        bowerDir + '/tablesorter/dist/js/widgets/widget-columnSelector.min.js',
     ], 'public/js/tablesorter.min.js');
 
     mix.scripts([
@@ -160,6 +171,7 @@ elixir(function(mix) {
         bowerDir + '/dropzone/dist/dropzone.js',
         bowerDir + '/typeahead.js/dist/typeahead.jquery.js',
         bowerDir + '/accounting/accounting.js',
+        bowerDir + '/money.js/money.js',
         bowerDir + '/spectrum/spectrum.js',
         bowerDir + '/moment/moment.js',
         bowerDir + '/moment-timezone/builds/moment-timezone-with-data.js',

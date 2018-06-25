@@ -62,14 +62,14 @@ trait SendsEmails
             $entityType = ENTITY_INVOICE;
         }
 
-        $template = '<div>$client,</div><br>';
+        $template = '<div>$client,</div><br />';
 
         if ($this->hasFeature(FEATURE_CUSTOM_EMAILS) && $this->email_design_id != EMAIL_DESIGN_PLAIN) {
-            $template .= '<div>' . trans("texts.{$entityType}_message_button", ['amount' => '$amount']) . '</div><br>' .
-                         '<div style="text-align: center;">$viewButton</div><br>';
+            $template .= '<div>' . trans("texts.{$entityType}_message_button", ['amount' => '$amount']) . '</div><br />' .
+                         '<div style="text-align:center;">$viewButton</div><br />';
         } else {
-            $template .= '<div>' . trans("texts.{$entityType}_message", ['amount' => '$amount']) . '</div><br>' .
-                         '<div>$viewLink</div><br>';
+            $template .= '<div>' . trans("texts.{$entityType}_message", ['amount' => '$amount']) . '</div><br />' .
+                         '<div>$viewLink</div><br />';
         }
 
         if ($message) {
@@ -203,5 +203,14 @@ trait SendsEmails
         }
 
         return Domain::getEmailFromId($this->domain_id);
+    }
+
+    public function getDailyEmailLimit()
+    {
+        $limit = MAX_EMAILS_SENT_PER_DAY;
+
+        $limit += $this->created_at->diffInMonths() * 100;
+
+        return min($limit, 2000);
     }
 }

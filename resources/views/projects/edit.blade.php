@@ -4,6 +4,7 @@
 
 	{!! Former::open($url)
             ->addClass('col-lg-10 col-lg-offset-1 warn-on-exit main-form')
+			->autocomplete('off')
             ->method($method)
             ->rules([
                 'name' => 'required',
@@ -13,6 +14,7 @@
     @if ($project)
         {!! Former::populate($project) !!}
 		{!! Former::populateField('task_rate', floatval($project->task_rate) ? Utils::roundSignificant($project->task_rate) : '') !!}
+		{!! Former::populateField('budgeted_hours', floatval($project->budgeted_hours) ? $project->budgeted_hours : '') !!}
     @endif
 
     <span style="display:none">
@@ -24,9 +26,6 @@
         <div class="col-lg-10 col-lg-offset-1">
 
             <div class="panel panel-default">
-            <div class="panel-heading">
-                <h3 class="panel-title">{!! trans('texts.project') !!}</h3>
-            </div>
             <div class="panel-body">
 
 				@if ($project)
@@ -41,9 +40,20 @@
 
                 {!! Former::text('name') !!}
 
+				{!! Former::text('due_date')
+	                        ->data_date_format(Session::get(SESSION_DATE_PICKER_FORMAT, DEFAULT_DATE_PICKER_FORMAT))
+	                        ->addGroupClass('due_date')
+	                        ->append('<i class="glyphicon glyphicon-calendar"></i>') !!}
+
+				{!! Former::text('budgeted_hours') !!}
+
 				{!! Former::text('task_rate')
 						->placeholder($project && $project->client->task_rate ? $project->client->present()->taskRate : $account->present()->taskRate)
 				 		->help('task_rate_help') !!}
+
+				@include('partials/custom_fields', ['entityType' => ENTITY_PROJECT])
+
+				{!! Former::textarea('private_notes')->rows(4) !!}
 
             </div>
             </div>
@@ -55,7 +65,8 @@
 	<center class="buttons">
         {!! Button::normal(trans('texts.cancel'))->large()->asLinkTo(HTMLUtils::previousUrl('/projects'))->appendIcon(Icon::create('remove-circle')) !!}
         {!! Button::success(trans('texts.save'))->submit()->large()->appendIcon(Icon::create('floppy-disk')) !!}
-		@if ($project && Auth::user()->can('create', ENTITY_TASK))
+
+		@if (false && $project && Auth::user()->can('create', ENTITY_TASK))
 			{!! DropdownButton::normal(trans('texts.more_actions'))
 				  ->withContents([
 					  [
@@ -118,10 +129,12 @@
 				if (client && parseFloat(client.task_rate)) {
 					var rate = client.task_rate;
 				} else {
-					var rate = {{ $account->present()->taskRate }};
+					var rate = {{ $account->present()->taskRate ?: 0 }};
 				}
 				$('#task_rate').attr('placeholder', roundSignificant(rate, true));
 			});
+
+			$('#due_date').datepicker('update', '{{ $project ? Utils::fromSqlDate($project->due_date) : '' }}');
 
 			@if ($clientPublicId)
 				$('#name').focus();

@@ -6,14 +6,15 @@
 
 @if (Auth::user()->account->hasFeature(FEATURE_WHITE_LABEL))
   {{ trans('texts.white_labeled') }}
-  @if (! Utils::isNinja() && $company->hasActivePlan() && $company->daysUntilPlanExpires() <= 10)
+  @if (! Utils::isNinja() && $company->hasActivePlan() && $company->daysUntilPlanExpires() <= 10 && $company->daysUntilPlanExpires() > 0)
     <br/><b>{!! trans('texts.license_expiring', [
         'count' => $company->daysUntilPlanExpires(),
-        'link' => '<a href="#" onclick="buyWhiteLabel()">' . trans('texts.click_here') . '</a>',
+        'link' => '<a href="#" onclick="showWhiteLabelModal()">' . trans('texts.click_here') . '</a>',
     ]) !!}</b>
   @endif
 @else
   <a href="#" onclick="showWhiteLabelModal()">{{ trans('texts.white_label_link') }}</a>
+@endif
 
   <div class="modal fade" id="whiteLabelModal" tabindex="-1" role="dialog" aria-labelledby="whiteLabelModalLabel" aria-hidden="true">
     <div class="modal-dialog">
@@ -105,9 +106,6 @@
       </div>
   </div>
 
-@endif
-
-
 <script type="text/javascript">
 
     function showWhiteLabelModal() {
@@ -120,31 +118,7 @@
     }
 
     function buyProduct(affiliateKey, productId) {
-
         location.href = "{{ url('white_label/purchase') }}";
-
-        //window.open('{{ Utils::isNinjaDev() ? '' : NINJA_APP_URL }}/buy_now/?account_key={{ NINJA_LICENSE_ACCOUNT_KEY }}&product_id=' + productId + '&contact_key={{ Auth::user()->primaryAccount()->account_key }}' + '&redirect_url=' + window.location.href);
-
-        /*
-        var url = '{{ Utils::isNinjaDev() ? '' : NINJA_APP_URL }}/buy_now/';
-        $.ajax({
-           url: url,
-           type: 'POST',
-           data: {
-               'account_key': '{{ NINJA_LICENSE_ACCOUNT_KEY }}',
-               'contact_key': '{{ Auth::user()->primaryAccount()->account_key }}',
-               'product_id': productId,
-               'first_name': '{{ Auth::user()->first_name }}',
-               'last_name': '{{ Auth::user()->last_name }}',
-               'email': '{{ Auth::user()->email }}',
-               'redirect_url': window.location.href,
-               'return_link': true,
-           },
-           success: function(response) {
-               openUrl(response, '/white_label')
-           }
-        });
-        */
     }
 
     function showApplyLicense() {

@@ -11,6 +11,8 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Event;
 use Cache;
 use Lang;
+use Str;
+use Cookie;
 use App\Events\UserLoggedIn;
 use App\Http\Requests\ValidateTwoFactorRequest;
 
@@ -103,8 +105,11 @@ class LoginController extends Controller
             */
         } else {
             $stacktrace = sprintf("%s %s %s %s\n", date('Y-m-d h:i:s'), $request->input('email'), \Request::getClientIp(), array_get($_SERVER, 'HTTP_USER_AGENT'));
-            file_put_contents(storage_path('logs/failed-logins.log'), $stacktrace, FILE_APPEND);
-            error_log('login failed');
+            if (config('app.log') == 'single') {
+                file_put_contents(storage_path('logs/failed-logins.log'), $stacktrace, FILE_APPEND);
+            } else {
+                Utils::logError('[failed login] ' . $stacktrace);
+            }
             if ($user) {
                 $user->failed_logins = $user->failed_logins + 1;
                 $user->save();
@@ -139,9 +144,18 @@ class LoginController extends Controller
     private function authenticated(Request $request, Authenticatable $user)
     {
         if ($user->google_2fa_secret) {
-            auth()->logout();
-            session()->put('2fa:user:id', $user->id);
-            return redirect('/validate_two_factor/' . $user->account->account_key);
+            $cookie = false;
+            if ($user->remember_2fa_token) {
+                $cookie = Cookie::get('remember_2fa_' . sha1($user->id));
+            }
+
+            if ($cookie && hash_equals($user->remember_2fa_token, $cookie)) {
+                // do nothing
+            } else {
+                auth()->logout();
+                session()->put('2fa:user:id', $user->id);
+                return redirect('/validate_two_factor/' . $user->account->account_key);
+            }
         }
 
         Event::fire(new UserLoggedIn());
@@ -180,6 +194,16 @@ class LoginController extends Controller
         auth()->loginUsingId($userId);
         Event::fire(new UserLoggedIn());
 
+        if ($trust = request()->trust) {
+            $user = auth()->user();
+            if (! $user->remember_2fa_token) {
+                $user->remember_2fa_token = Str::random(60);
+                $user->save();
+            }
+            $minutes = $trust == 30 ? 60 * 27 * 30 : 2628000;
+            cookie()->queue('remember_2fa_' . sha1($user->id), $user->remember_2fa_token, $minutes);
+        }
+
         return redirect()->intended($this->redirectTo);
     }
 
@@ -188,7 +212,7 @@ class LoginController extends Controller
      */
     public function getLogoutWrapper(Request $request)
     {
-        if (auth()->check() && ! auth()->user()->registered) {
+        if (auth()->check() && ! auth()->user()->email && ! auth()->user()->registered) {
             if (request()->force_logout) {
                 $account = auth()->user()->account;
                 app('App\Ninja\Repositories\AccountRepository')->unlinkAccount($account);

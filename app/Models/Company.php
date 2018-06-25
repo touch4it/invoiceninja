@@ -126,6 +126,11 @@ class Company extends Eloquent
             return false;
         }
 
+        // if they've already been pro return false
+        if ($this->plan_expires && $this->plan_expires != '0000-00-00') {
+            return false;
+        }
+
         // if they've already had a discount or a promotion is active return false
         if ($this->discount_expires || $this->hasActivePromo()) {
             return false;
@@ -155,6 +160,11 @@ class Company extends Eloquent
     public function getPlanDetails($includeInactive = false, $includeTrial = true)
     {
         $account = $this->accounts()->first();
+
+        if (! $account) {
+            return false;
+        }
+
         return $account->getPlanDetails($includeInactive, $includeTrial);
     }
 

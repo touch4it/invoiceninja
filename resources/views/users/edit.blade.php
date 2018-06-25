@@ -4,7 +4,7 @@
   @parent
   @include('accounts.nav', ['selected' => ACCOUNT_USER_MANAGEMENT])
 
-  {!! Former::open($url)->method($method)->addClass('warn-on-exit user-form')->rules(array(
+  {!! Former::open($url)->autocomplete('off')->method($method)->addClass('warn-on-exit user-form')->rules(array(
       'first_name' => 'required',
       'last_name' => 'required',
       'email' => 'required|email',
@@ -73,6 +73,12 @@
       ->id('permissions_edit_all')
       ->text(trans('texts.user_edit_all'))
       ->help(trans('texts.edit_all_help')) !!}
+  {!! Former::checkbox('permissions[manage_own_tasks]')
+      ->value('manage_own_tasks')
+      ->label('&nbsp;')
+      ->id('permissions_manage_own_tasks')
+      ->text(trans('texts.manage_own_tasks'))
+      ->help(trans('texts.manage_own_tasks_help')) !!}
 
 </div>
 </div>

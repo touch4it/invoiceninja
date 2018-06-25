@@ -12,6 +12,7 @@ class HistoryUtils
     public static function loadHistory($users)
     {
         $userIds = [];
+        session([RECENTLY_VIEWED => false]);
 
         if (is_array($users)) {
             foreach ($users as $user) {
@@ -37,7 +38,7 @@ class HistoryUtils
             ACTIVITY_TYPE_VIEW_QUOTE,
         ];
 
-        $activities = Activity::with(['client.contacts', 'invoice', 'task', 'expense'])
+        $activities = Activity::with(['client.contacts', 'invoice', 'task.project', 'expense'])
             ->whereIn('user_id', $userIds)
             ->whereIn('activity_type_id', $activityTypes)
             ->orderBy('id', 'desc')
@@ -45,6 +46,10 @@ class HistoryUtils
             ->get();
 
         foreach ($activities->reverse() as $activity) {
+            if ($activity->client && $activity->client->is_deleted) {
+                continue;
+            }
+
             if ($activity->activity_type_id == ACTIVITY_TYPE_CREATE_CLIENT) {
                 $entity = $activity->client;
             } elseif ($activity->activity_type_id == ACTIVITY_TYPE_CREATE_TASK || $activity->activity_type_id == ACTIVITY_TYPE_UPDATE_TASK) {
@@ -53,6 +58,12 @@ class HistoryUtils
                     continue;
                 }
                 $entity->setRelation('client', $activity->client);
+
+                if ($entity->project) {
+                    $project = $entity->project;
+                    $project->setRelation('client', $activity->client);
+                    static::trackViewed($project);
+                }
             } elseif ($activity->activity_type_id == ACTIVITY_TYPE_CREATE_EXPENSE || $activity->activity_type_id == ACTIVITY_TYPE_UPDATE_EXPENSE) {
                 $entity = $activity->expense;
                 if (! $entity) {
@@ -71,6 +82,28 @@ class HistoryUtils
         }
     }
 
+    public static function deleteHistory(EntityModel $entity)
+    {
+        $history = Session::get(RECENTLY_VIEWED) ?: [];
+        $accountHistory = isset($history[$entity->account_id]) ? $history[$entity->account_id] : [];
+        $remove = [];
+
+        for ($i=0; $i<count($accountHistory); $i++) {
+            $item = $accountHistory[$i];
+            if ($entity->equalTo($item)) {
+                $remove[] = $i;
+            } elseif ($entity->getEntityType() == ENTITY_CLIENT && $entity->public_id == $item->client_id) {
+                $remove[] = $i;
+            }
+        }
+
+        for ($i=count($remove) - 1; $i>=0; $i--) {
+            array_splice($history[$entity->account_id], $remove[$i], 1);
+        }
+
+        Session::put(RECENTLY_VIEWED, $history);
+    }
+
     public static function trackViewed(EntityModel $entity)
     {
         $entityType = $entity->getEntityType();
@@ -80,10 +113,16 @@ class HistoryUtils
             ENTITY_QUOTE,
             ENTITY_TASK,
             ENTITY_EXPENSE,
+            ENTITY_PROJECT,
+            ENTITY_PROPOSAL,
             //ENTITY_RECURRING_EXPENSE,
         ];
 
         if (! in_array($entityType, $trackedTypes)) {
+            return;
+        }
+
+        if ($entity->is_deleted) {
             return;
         }
 
@@ -123,6 +162,7 @@ class HistoryUtils
     private static function convertToObject($entity)
     {
         $object = new stdClass();
+        $object->id = $entity->id;
         $object->accountId = $entity->account_id;
         $object->url = $entity->present()->url;
         $object->entityType = $entity->subEntityType();
@@ -135,6 +175,9 @@ class HistoryUtils
         } elseif (method_exists($entity, 'client') && $entity->client) {
             $object->client_id = $entity->client->public_id;
             $object->client_name = $entity->client->getDisplayName();
+        } elseif (method_exists($entity, 'invoice') && $entity->invoice) {
+            $object->client_id = $entity->invoice->client->public_id;
+            $object->client_name = $entity->invoice->client->getDisplayName();
         } else {
             $object->client_id = 0;
             $object->client_name = 0;
@@ -175,7 +218,8 @@ class HistoryUtils
                     $button = '';
                 }
 
-                $str .= sprintf('<li>%s<a href="%s"><div>%s %s</div></a></li>', $button, $link, $icon, $name);
+                $padding = $str ? 16 : 0;
+                $str .= sprintf('<li style="margin-top: %spx">%s<a href="%s"><div>%s %s</div></a></li>', $padding, $button, $link, $icon, $name);
                 $lastClientId = $item->client_id;
             }
 

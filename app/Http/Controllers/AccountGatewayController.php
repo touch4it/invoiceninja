@@ -52,7 +52,7 @@ class AccountGatewayController extends BaseController
         $accountGateway = AccountGateway::scope($publicId)->firstOrFail();
         $config = $accountGateway->getConfig();
 
-        if ($accountGateway->gateway_id != GATEWAY_CUSTOM) {
+        if (! $accountGateway->isCustom()) {
             foreach ($config as $field => $value) {
                 $config->$field = str_repeat('*', strlen($value));
             }
@@ -152,7 +152,7 @@ class AccountGatewayController extends BaseController
             'config' => false,
             'gateways' => $gateways,
             'creditCardTypes' => $creditCards,
-            'countGateways' => count($currentGateways),
+            'countGateways' => $currentGateways->count(),
         ];
     }
 
@@ -183,6 +183,8 @@ class AccountGatewayController extends BaseController
 
         if ($gatewayId == GATEWAY_DWOLLA) {
             $optional = array_merge($optional, ['key', 'secret']);
+        } elseif ($gatewayId == GATEWAY_PAYMILL) {
+            $rules['publishable_key'] = 'required';
         } elseif ($gatewayId == GATEWAY_STRIPE) {
             if (Utils::isNinjaDev()) {
                 // do nothing - we're unable to acceptance test with StripeJS
@@ -255,8 +257,6 @@ class AccountGatewayController extends BaseController
                     }
                     if (! $value && in_array($field, ['testMode', 'developerMode', 'sandbox'])) {
                         // do nothing
-                    } elseif ($gatewayId == GATEWAY_CUSTOM) {
-                        $config->$field = Utils::isNinjaProd() ? strip_tags($value) : $value;
                     } else {
                         $config->$field = $value;
                     }

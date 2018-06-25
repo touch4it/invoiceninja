@@ -6,6 +6,7 @@ use Illuminate\Queue\Events\JobExceptionOccurred;
 use App\Events\InvoiceInvitationWasViewed;
 use App\Events\InvoiceWasCreated;
 use App\Events\InvoiceWasUpdated;
+use App\Events\InvoiceWasEmailed;
 use App\Events\PaymentFailed;
 use App\Events\PaymentWasCreated;
 use App\Events\PaymentWasDeleted;
@@ -61,6 +62,16 @@ class InvoiceListener
     }
 
     /**
+     * @param InvoiceWasEmailed $event
+     */
+    public function emailedInvoice(InvoiceWasEmailed $event)
+    {
+        $invoice = $event->invoice;
+        $invoice->last_sent_date = date('Y-m-d');
+        $invoice->save();
+    }
+
+    /**
      * @param PaymentWasCreated $event
      */
     public function createdPayment(PaymentWasCreated $event)
@@ -79,6 +90,11 @@ class InvoiceListener
                         ->first();
         $activity->json_backup = $invoice->hidePrivateFields()->toJSON();
         $activity->save();
+
+        if ($invoice->balance == 0 && $payment->account->auto_archive_invoice) {
+            $invoiceRepo = app('App\Ninja\Repositories\InvoiceRepository');
+            $invoiceRepo->archive($invoice);
+        }
     }
 
     /**

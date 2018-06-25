@@ -34,6 +34,7 @@ class User extends Authenticatable
         'create_all' => 0b0001,
         'view_all' => 0b0010,
         'edit_all' => 0b0100,
+        'manage_own_tasks' => 0b1000
     ];
 
     /**
@@ -69,6 +70,8 @@ class User extends Authenticatable
         'oauth_provider_id',
         'google_2fa_secret',
         'google_2fa_phone',
+        'remember_2fa_token',
+        'slack_webhook_url',
     ];
 
     /**
@@ -132,6 +135,26 @@ class User extends Authenticatable
     public function isPro()
     {
         return $this->account->isPro();
+    }
+
+    /**
+     * @return mixed
+     */
+    public function isEnterprise()
+    {
+        return $this->account->isEnterprise();
+    }
+
+    /**
+     * @return mixed
+     */
+    public function isTrusted()
+    {
+        if (Utils::isSelfHost()) {
+            true;
+        }
+
+        return $this->account->isPro() && ! $this->account->isTrial();
     }
 
     /**
@@ -306,9 +329,7 @@ class User extends Authenticatable
      */
     public function isEmailBeingChanged()
     {
-        return Utils::isNinjaProd()
-                && $this->email != $this->getOriginal('email')
-                && $this->getOriginal('confirmed');
+        return Utils::isNinjaProd() && $this->email != $this->getOriginal('email');
     }
 
      /**
@@ -434,6 +455,29 @@ class User extends Authenticatable
     {
         //$this->notify(new ResetPasswordNotification($token));
         app('App\Ninja\Mailers\UserMailer')->sendPasswordReset($this, $token);
+    }
+
+    public function routeNotificationForSlack()
+    {
+        return $this->slack_webhook_url;
+    }
+
+    public function hasAcceptedLatestTerms()
+    {
+        if (! NINJA_TERMS_VERSION) {
+            return true;
+        }
+
+        return $this->accepted_terms_version == NINJA_TERMS_VERSION;
+    }
+
+    public function acceptLatestTerms($ip)
+    {
+        $this->accepted_terms_version = NINJA_TERMS_VERSION;
+        $this->accepted_terms_timestamp = date('Y-m-d H:i:s');
+        $this->accepted_terms_ip = $ip;
+
+        return $this;
     }
 }
 

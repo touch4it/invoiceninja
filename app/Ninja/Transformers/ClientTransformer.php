@@ -118,6 +118,7 @@ class ClientTransformer extends EntityTransformer
         return array_merge($this->getDefaults($client), [
             'id' => (int) $client->public_id,
             'name' => $client->name,
+            'display_name' => $client->getDisplayName(),
             'balance' => (float) $client->balance,
             'paid_to_date' => (float) $client->paid_to_date,
             'updated_at' => $this->getTimestamp($client->updated_at),
@@ -155,6 +156,7 @@ class ClientTransformer extends EntityTransformer
             'show_tasks_in_portal' => (bool) $client->show_tasks_in_portal,
             'send_reminders' => (bool) $client->send_reminders,
             'credit_number_counter' => (int) $client->credit_number_counter,
+            'custom_messages' => json_encode($client->custom_messages),
         ]);
     }
 }

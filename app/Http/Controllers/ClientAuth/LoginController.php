@@ -39,7 +39,7 @@ class LoginController extends Controller
      */
     public function __construct()
     {
-        $this->middleware('guest:client', ['except' => 'logout']);
+        $this->middleware('guest:client', ['except' => 'getLogoutWrapper']);
     }
 
     /**
@@ -58,7 +58,7 @@ class LoginController extends Controller
     public function showLoginForm()
     {
         $subdomain = Utils::getSubdomain(\Request::server('HTTP_HOST'));
-        $hasAccountIndentifier = request()->account_key || ($subdomain && $subdomain != 'app');
+        $hasAccountIndentifier = request()->account_key || ($subdomain && ! in_array($subdomain, ['www', 'app']));
 
         if (! session('contact_key')) {
             if (Utils::isNinja()) {
@@ -91,12 +91,14 @@ class LoginController extends Controller
             $credentials = $request->only('email', 'password');
             $account = false;
 
-            // resovle the email to a contact/account
-            if ($accountKey = request()->account_key) {
+            // resolve the email to a contact/account
+            if (! Utils::isNinja() && Account::count() == 1) {
+                $account = Account::first();
+            } elseif ($accountKey = request()->account_key) {
                 $account = Account::whereAccountKey($accountKey)->first();
             } else {
                 $subdomain = Utils::getSubdomain(\Request::server('HTTP_HOST'));
-                if ($subdomain != 'app') {
+                if ($subdomain && $subdomain != 'app') {
                     $account = Account::whereSubdomain($subdomain)->first();
                 }
             }
@@ -166,6 +168,18 @@ class LoginController extends Controller
     public function getSessionExpired()
     {
         return view('clientauth.sessionexpired')->with(['clientauth' => true]);
+    }
+
+    /**
+     * @return \Illuminate\Http\Response
+     */
+    public function getLogoutWrapper(Request $request)
+    {
+        $contactKey = session('contact_key');
+
+        self::logout($request);
+
+        return redirect('/client/dashboard/' . $contactKey);
     }
 
 }

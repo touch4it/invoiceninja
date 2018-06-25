@@ -36,8 +36,13 @@ class StartupCheck
         // Set up trusted X-Forwarded-Proto proxies
         // TRUSTED_PROXIES accepts a comma delimited list of subnets
         // ie, TRUSTED_PROXIES='10.0.0.0/8,172.16.0.0/12,192.168.0.0/16'
+        // set TRUSTED_PROXIES=* if you want to trust every proxy.
         if (isset($_ENV['TRUSTED_PROXIES'])) {
-            $request->setTrustedProxies(array_map('trim', explode(',', env('TRUSTED_PROXIES'))));
+            if (env('TRUSTED_PROXIES') == '*') {
+                $request->setTrustedProxies(['127.0.0.1', $request->server->get('REMOTE_ADDR')]);
+            } else{
+                $request->setTrustedProxies(array_map('trim', explode(',', env('TRUSTED_PROXIES'))));
+            }
         }
 
         // Ensure all request are over HTTPS in production
@@ -48,6 +53,11 @@ class StartupCheck
         // If the database doens't yet exist we'll skip the rest
         if (! Utils::isNinja() && ! Utils::isDatabaseSetup()) {
             return $next($request);
+        }
+
+        // Check to prevent headless browsers from triggering activity
+        if (Utils::isNinja() && ! $request->phantomjs && strpos($request->header('User-Agent'), 'Headless') !== false) {
+            abort(403);
         }
 
         // Check if a new version was installed
@@ -137,7 +147,7 @@ class StartupCheck
         if (Input::has('lang')) {
             $locale = Input::get('lang');
             App::setLocale($locale);
-            Session::set(SESSION_LOCALE, $locale);
+            session([SESSION_LOCALE => $locale]);
 
             if (Auth::check()) {
                 if ($language = Language::whereLocale($locale)->first()) {
@@ -171,14 +181,18 @@ class StartupCheck
                 if ($data == RESULT_FAILURE) {
                     Session::flash('error', trans('texts.invalid_white_label_license'));
                 } elseif ($data) {
-                    $company->plan_term = PLAN_TERM_YEARLY;
-                    $company->plan_paid = $data;
-                    $date = max(date_create($data), date_create($company->plan_expires));
-                    $company->plan_expires = $date->modify('+1 year')->format('Y-m-d');
-                    $company->plan = PLAN_WHITE_LABEL;
-                    $company->save();
+                    $date = date_create($data)->modify('+1 year');
+                    if ($date < date_create()) {
+                        Session::flash('message', trans('texts.expired_white_label'));
+                    } else {
+                        $company->plan_term = PLAN_TERM_YEARLY;
+                        $company->plan_paid = $data;
+                        $company->plan_expires = $date->format('Y-m-d');
+                        $company->plan = PLAN_WHITE_LABEL;
+                        $company->save();
 
-                    Session::flash('message', trans('texts.bought_white_label'));
+                        Session::flash('message', trans('texts.bought_white_label'));
+                    }
                 } else {
                     Session::flash('error', trans('texts.white_label_license_error'));
                 }
@@ -206,7 +220,7 @@ class StartupCheck
                     $orderBy = 'id';
                 }
                 $tableData = $class::orderBy($orderBy)->get();
-                if (count($tableData)) {
+                if ($tableData->count()) {
                     Cache::forever($name, $tableData);
                 }
             }
@@ -214,7 +228,7 @@ class StartupCheck
 
         // Show message to IE 8 and before users
         if (isset($_SERVER['HTTP_USER_AGENT']) && preg_match('/(?i)msie [2-8]/', $_SERVER['HTTP_USER_AGENT'])) {
-            Session::flash('error', trans('texts.old_browser', ['link' => OUTDATE_BROWSER_URL]));
+            Session::flash('error', trans('texts.old_browser', ['link' => link_to(OUTDATE_BROWSER_URL, trans('texts.newer_browser'), ['target' => '_blank'])]));
         }
 
         $response = $next($request);

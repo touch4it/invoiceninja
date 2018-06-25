@@ -4,11 +4,12 @@
 
 # Invoice Ninja
 
-[![Build Status](https://travis-ci.org/invoiceninja/invoiceninja.svg?branch=develop)](https://travis-ci.org/invoiceninja/invoiceninja)
+[![Build Status](https://travis-ci.org/invoiceninja/invoiceninja.svg?branch=master)](https://travis-ci.org/invoiceninja/invoiceninja)
 [![Docs](https://readthedocs.org/projects/invoice-ninja/badge/?version=latest)](http://docs.invoiceninja.com/en/latest/?badge=latest)
-[![Join the chat at https://gitter.im/hillelcoren/invoice-ninja](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/hillelcoren/invoice-ninja?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 ## [Hosted](https://www.invoiceninja.com) | [Self-Hosted](https://www.invoiceninja.org) | [iPhone](https://itunes.apple.com/WebObjects/MZStore.woa/wa/viewSoftware?id=1220337560&mt=8) | [Android](https://play.google.com/store/apps/details?id=com.invoiceninja.invoiceninja)
+
+### We're on Slack, join us at [slack.invoiceninja.com](http://slack.invoiceninja.com)
 
 All Pro and Enterprise features from the hosted app are included in the open-source code. We offer a $20 per year white-label license to remove our branding for personal use.
 
@@ -24,22 +25,19 @@ The self-host zip includes all third party libraries whereas downloading the cod
 * Referral Program (we pay you)
 	* $100 per sign up paid over 3 years - [Learn more](https://www.invoiceninja.com/referral-program/)
 * White-Label Reseller (you pay us)
-	* Hosted: $500 sign up fee and either 10% of revenue or $1/user/month
+	* Hosted: $500 annually and either 10% of revenue or $1/user/month
 	* Self-Hosted: Contact us for volume license pricing
 
 ### Installation Options
+* [Ansible](https://github.com/invoiceninja/ansible-installer)
 * [Self-Host Zip](http://docs.invoiceninja.com/en/latest/install.html)
 * [Docker File](https://github.com/invoiceninja/dockerfiles)
+* [Cloudron](https://cloudron.io/store/com.invoiceninja.cloudronapp.html)
 * [Softaculous](https://www.softaculous.com/apps/ecommerce/Invoice_Ninja)
 
 ## Recommended Providers
 * [Stripe](https://stripe.com/)
 * [Postmark](https://postmarkapp.com/)
-
-## Tools
-* [InvoicePlane Import](https://github.com/turbo124/Plane2Ninja)
-* [Toggl Sync](https://github.com/Matth--/toggl-invoiceninja-sync)
-* [Shopping Cart](https://github.com/Scifabric/invoiceninjashoppingcart)
 
 ## Development
 * [API Documentation](http://docs.invoiceninja.com/en/latest/api.html)
@@ -47,10 +45,18 @@ The self-host zip includes all third party libraries whereas downloading the cod
 * [Zend Framework](https://github.com/alexz707/InvoiceNinjaModule)
 * [Custom Module](http://docs.invoiceninja.com/en/latest/custom_modules.html) | [Watch Video](https://www.youtube.com/watch?v=8jJ-PYuq85k)
 
-## Third Party Developers
-* [theDevelopers](https://www.thedevelopers.ro/customisation-request-invoiceninja)
+## Third Party Modules
+* [Event Scheduler](https://github.com/cytech/Scheduler-InvoiceNinja)
 
-Email us to be added to the list
+> Feel free to email us for help if you're working on a module, we're happy to provide developer support.
+
+## Third Party Tools
+* [InvoicePlane Import](https://github.com/turbo124/Plane2Ninja)
+* [Toggl Sync](https://github.com/Matth--/toggl-invoiceninja-sync)
+* [Shopping Cart](https://github.com/Scifabric/invoiceninjashoppingcart)
+
+## Third Party Developers
+* [Some Techie](https://www.sometechie.com/customize-invoice-ninja/)
 
 ## Contributing
 All contributors are welcome!  

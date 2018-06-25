@@ -24,8 +24,8 @@ class ProductTransformer extends EntityTransformer
             'id' => (int) $product->public_id,
             'product_key' => $product->product_key,
             'notes' => $product->notes,
-            'cost' => $product->cost,
-            'qty' => $product->qty,
+            'cost' => (float) $product->cost,
+            'qty' => (float) $product->qty,
             'tax_name1' => $product->tax_name1 ?: '',
             'tax_rate1' => (float) $product->tax_rate1,
             'tax_name2' => $product->tax_name2 ?: '',
@@ -34,6 +34,7 @@ class ProductTransformer extends EntityTransformer
             'archived_at' => $this->getTimestamp($product->deleted_at),
             'custom_value1' => $product->custom_value1,
             'custom_value2' => $product->custom_value2,
+            'is_deleted' => (bool) $product->is_deleted,
         ]);
     }
 }

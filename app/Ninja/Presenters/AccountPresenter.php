@@ -5,6 +5,7 @@ namespace App\Ninja\Presenters;
 use Carbon;
 use Domain;
 use App\Models\TaxRate;
+use App\Models\Account;
 use Laracasts\Presenter\Presenter;
 use stdClass;
 use Utils;
@@ -57,7 +58,7 @@ class AccountPresenter extends Presenter
      */
     public function taskRate()
     {
-        if ($this->entity->task_rate) {
+        if (floatval($this->entity->task_rate)) {
             return Utils::roundSignificant($this->entity->task_rate);
         } else {
             return '';
@@ -194,20 +195,20 @@ class AccountPresenter extends Presenter
     public function customTextFields()
     {
         $fields = [
-            'custom_client_label1' => 'custom_client1',
-            'custom_client_label2' => 'custom_client2',
-            'custom_contact_label1' => 'custom_contact1',
-            'custom_contact_label2' => 'custom_contact2',
-            'custom_invoice_text_label1' => 'custom_invoice1',
-            'custom_invoice_text_label2' => 'custom_invoice2',
-            'custom_invoice_item_label1' => 'custom_product1',
-            'custom_invoice_item_label2' => 'custom_product2',
+            'client1' => 'custom_client1',
+            'client1' => 'custom_client2',
+            'contact1' => 'custom_contact1',
+            'contact2' => 'custom_contact2',
+            'invoice_text1' => 'custom_invoice1',
+            'invoice_text2' => 'custom_invoice2',
+            'product1' => 'custom_product1',
+            'product2' => 'custom_product2',
         ];
         $data = [];
 
         foreach ($fields as $key => $val) {
-            if ($this->$key) {
-                $data[$this->$key] = [
+            if ($label = $this->customLabel($key)) {
+                $data[Utils::getCustomLabel($label)] = [
                     'value' => $val,
                     'name' => $val,
                 ];
@@ -246,9 +247,9 @@ class AccountPresenter extends Presenter
             $url .= $account->subdomain ?: 'app';
             $url .= '.' . Domain::getDomainFromId($account->domain_id);
         } else {
-            $url = SITE_URL;
+            $url = trim(SITE_URL, '/');
         }
-        
+
         $url .= '/client/login';
 
         if (Utils::isNinja()) {
@@ -262,5 +263,10 @@ class AccountPresenter extends Presenter
         }
 
         return $url;
+    }
+
+    public function customLabel($field)
+    {
+        return Utils::getCustomLabel($this->entity->customLabel($field));
     }
 }
