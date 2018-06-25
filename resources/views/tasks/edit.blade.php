@@ -103,9 +103,8 @@
 
             @else
                 {!! Former::radios('task_type')->radios([
-                        trans('texts.timer') => array('name' => 'task_type', 'value' => 'timer'),
-                        trans('texts.manual') => array('name' => 'task_type', 'value' => 'manual'),
-                ])->inline()->check('timer')->label('&nbsp;') !!}
+                        trans('texts.manual') => array('name' => 'task_type', 'value' => 'manual')
+                ])->inline()->check('manual')->label('&nbsp;') !!}
             @endif
 
             <div class="form-group simple-time" id="datetime-details" style="display: none">

@@ -14,6 +14,7 @@ class TaskKanbanController extends BaseController
      */
     public function index($clientPublicId = false, $projectPublicId = false)
     {
+        redirect('/');
         $tasks = Task::scope()
             ->with(['project', 'client', 'task_status'])
             ->whereNull('invoice_id')
