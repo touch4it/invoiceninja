@@ -166,7 +166,6 @@
                 {!! Button::normal(trans('texts.cancel'))->large()->asLinkTo(HTMLUtils::previousUrl('/tasks'))->appendIcon(Icon::create('remove-circle')) !!}
                 @if ($task)
                     {!! Button::success(trans('texts.save'))->large()->appendIcon(Icon::create('floppy-disk'))->withAttributes(['id' => 'save-button']) !!}
-                    {!! Button::primary(trans('texts.resume'))->large()->appendIcon(Icon::create('play'))->withAttributes(['id' => 'resume-button']) !!}
                     {!! DropdownButton::normal(trans('texts.more_actions'))
                           ->withContents($actions)
                           ->large()
@@ -523,9 +522,6 @@
         });
         $('#stop-button').click(function() {
             submitAction('stop');
-        });
-        $('#resume-button').click(function() {
-            submitAction('resume');
         });
 
         @if ($task)

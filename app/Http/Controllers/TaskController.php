@@ -264,7 +264,7 @@ class TaskController extends BaseController
         $ids = Input::get('public_id') ?: (Input::get('id') ?: Input::get('ids'));
         $referer = Request::server('HTTP_REFERER');
 
-        if (in_array($action, ['resume', 'stop'])) {
+        if (in_array($action, ['stop'])) {
             $this->taskRepo->save($ids, ['action' => $action]);
             Session::flash('message', trans($action == 'stop' ? 'texts.stopped_task' : 'texts.resumed_task'));
             return $this->returnBulk($this->entityType, $action, $ids);
